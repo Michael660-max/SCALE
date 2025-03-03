@@ -1,0 +1,8 @@
+{
+    "java.project.sourcePaths": [
+        "src/OrderService",
+        "src/ProductService",
+        "src/UserService"
+    ],
+    "java.project.referencedLibraries": []
+}
