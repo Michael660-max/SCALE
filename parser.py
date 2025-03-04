@@ -71,7 +71,7 @@ def handle_user_action(action, params):
         print_response("USER UPDATE", response)
     elif action == "delete":
         data = {
-            "command": "create",
+            "command": "delete",
             "id": int(params[0]) if len(params) > 0 else "",
             "username": params[1] if len(params) > 1 else "",
             "email": params[2] if len(params) > 2 else "",
