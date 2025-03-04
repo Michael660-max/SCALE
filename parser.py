@@ -40,8 +40,7 @@ def parse_workload(file_path):
             
             parts = line.split()
             service = parts[0].upper()
-            # action = parts[1].lower()
-            action = parts[1]
+            action = parts[1].lower()
 
             if service == "USER":
                 handle_user_action(action, parts[2:])
@@ -119,7 +118,7 @@ def handle_product_action(action, params):
     elif action == "delete":
         # data = {"command": "delete", "id": int(params[0]), "productname": params[1], "price": float(params[2]), "quantity": int(params[3])}
         data = {
-            "command": "create",
+            "command": "delete",
             "id": int(params[0]) if len(params) > 0 else "",
             "productname": params[1] if len(params) > 1 else "",
             "description": params[2] if len(params) > 2 else "",
