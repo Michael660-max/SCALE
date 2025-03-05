@@ -9,8 +9,13 @@ import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
+import java.sql.Connection;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.sql.SQLException;
 import java.util.HashMap;
 import java.util.Map;
+
 
 public class UserService {
     // private static final int PORT = 14001;
@@ -193,6 +198,11 @@ class UserManager {
 
     public UserManager() {
         this.users = new HashMap<>();
+        try (Connection conn = DatabaseConnection.getConnection()) {
+            System.out.println("Connected to database");
+        } catch (SQLException e) {
+            System.err.println("Database connection error: " + e.getMessage());
+        }
     }
 
     public User addUser(User user) {
@@ -208,8 +218,31 @@ class UserManager {
             return null;
         }
 
-        users.put(user.getId(), user);
-        return user;
+        // users.put(user.getId(), user);
+
+        String sql = "INSERT INTO users (id, username, email, password) VALUES (?, ?, ?, ?)";
+
+        try (Connection conn = DatabaseConnection.getConnection();
+             PreparedStatement pstmt = conn.prepareStatement(sql)) {
+            
+            pstmt.setInt(1, user.getId());
+            pstmt.setString(2, user.getUsername());
+            pstmt.setString(3, user.getEmail());
+            pstmt.setString(4, user.getPassword());
+            
+            int affectedRows = pstmt.executeUpdate();
+            
+            if (affectedRows > 0) {
+                return user;
+            }
+            
+        } catch (SQLException e) {
+            System.err.println("Error adding user: " + e.getMessage());
+        }
+
+        return null;
+
+        // return user;
     }
 
     public User updateUser(int id, String username, String email, String password) {
@@ -242,7 +275,31 @@ class UserManager {
     }
 
     public User getUser(int id) {
-        return users.get(id);
+        // return users.get(id);
+        String sql = "SELECT * FROM users WHERE id = ?";
+
+        try (Connection conn = DatabaseConnection.getConnection();
+            PreparedStatement pstmt = conn.prepareStatement(sql)) {
+            
+            pstmt.setInt(1, id);
+
+            try (ResultSet rs = pstmt.executeQuery()) {
+                if (rs.next()) {
+                    return new User(
+                        rs.getInt("id"),
+                        rs.getString("username"),
+                        rs.getString("email"),
+                        rs.getString("password")
+                    );
+                }
+            }
+
+
+        } catch (SQLException e) {
+            System.err.println("Error retrieving user: " + e.getMessage());
+        }
+        
+        return null;
     }
 }
 

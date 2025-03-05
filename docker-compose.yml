@@ -1,0 +1,26 @@
+version: '3'
+
+services:
+  postgres:
+    container_name: A2_postgres
+    image: postgres:latest
+    environment:
+      POSTGRES_PASSWORD: Michael2004ts
+      POSTGRES_USER: postgres
+      POSTGRES_DB: postgres
+      POSTGRES_HOST_AUTH_METHOD: trust
+    command: postgres -c listen_addresses='*'
+    ports:
+      - "0.0.0.0:5431:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    restart: always
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  postgres-data:
+    name: postgres-data
