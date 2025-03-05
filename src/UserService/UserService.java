@@ -326,7 +326,7 @@ class UserHandler implements HttpHandler {
             User user = new User(id, username, email, password);
 
             if (userManager.getUser(id) != null) {
-                sendErrorResponse(exchange, 409, "");
+                sendErrorResponse(exchange, 400, "");
                 return;
             }
             
