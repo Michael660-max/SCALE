@@ -121,8 +121,8 @@ def handle_product_action(action, params):
             "command": "delete",
             "id": int(params[0]) if len(params) > 0 else "",
             "productname": params[1] if len(params) > 1 else "",
-            "price": float(params[3]) if len(params) > 3 else "",
-            "quantity": int(params[4]) if len(params) > 4 else ""
+            "price": float(params[2]) if len(params) > 2 else "",
+            "quantity": int(params[3]) if len(params) > 3 else ""
         }
         response = requests.post(PRODUCT_SERVICE_URL, json=data)
         print_response("PRODUCT DELETE", response)
