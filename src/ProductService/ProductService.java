@@ -269,7 +269,7 @@ class ProductHandler implements HttpHandler {
     private void handleCreateProduct(HttpExchange exchange, Map<String, String> requestData) throws IOException {
         try {
             int id = Integer.parseInt(requestData.get("id"));
-            String name = requestData.get("productname");
+            String name = requestData.get("name");
             String description = requestData.getOrDefault("description", "");
             double price = Double.parseDouble(requestData.get("price"));
             int quantity = Integer.parseInt(requestData.get("quantity"));
@@ -322,7 +322,7 @@ class ProductHandler implements HttpHandler {
     private void handleDeleteProduct(HttpExchange exchange, Map<String, String> requestData) throws IOException {
         try {
             int id = Integer.parseInt(requestData.get("id"));
-            String name = requestData.get("productname");
+            String name = requestData.get("name");
             Double price = requestData.containsKey("price") ? Double.parseDouble(requestData.get("price")) : null;
             Integer quantity = requestData.containsKey("quantity") ? Integer.parseInt(requestData.get("quantity")) : null;
 
