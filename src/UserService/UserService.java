@@ -9,8 +9,15 @@ import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
+import java.sql.Connection;
+import java.sql.DriverManager;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.sql.Statement;
 import java.util.HashMap;
 import java.util.Map;
+
 
 public class UserService {
     // private static final int PORT = 14001;
@@ -52,7 +59,6 @@ public class UserService {
 
     
 
-    
     /** 
      * @param json
      * @return Map<String, Map<String, String>>
@@ -125,14 +131,22 @@ public class UserService {
      * @throws IOException
      */
     public static void main(String[] args) throws IOException {
-        // loadConfig(args[0]);
-        loadConfig(null);
-        HttpServer server = HttpServer.create(new InetSocketAddress(PORT), 0);
+        loadConfig(args.length > 0 ? args[0] : null);
+        
+        // Use IP from config, defaulting to 0.0.0.0 if not set
+        String bindAddress = (IP != null && !IP.isEmpty()) ? IP : "0.0.0.0";
+        
+        // Ensure PORT is valid
+        if (PORT <= 0) {
+            PORT = 14001; // Default port
+        }
+        
+        HttpServer server = HttpServer.create(new InetSocketAddress(bindAddress, PORT), 0);
         server.createContext("/user", new UserHandler());
-        server.setExecutor(null);
+        server.setExecutor(java.util.concurrent.Executors.newFixedThreadPool(10));
         server.start();
-
-        System.out.println("UserService started on port " + PORT);
+        
+        System.out.println("UserService started on " + bindAddress + ":" + PORT);
     }
 }
 
@@ -187,12 +201,53 @@ class User {
     }
 }
 
+class DatabaseManager {
+    private static final String DB_URL = "jdbc:sqlite:users.db";
+    private static boolean initialized = false;
+    
+    static {
+        try {
+            Class.forName("org.sqlite.JDBC");
+            System.out.println("SQLite JDBC driver loaded successfully");
+        } catch (ClassNotFoundException e) {
+            System.err.println("Error loading SQLite driver: " + e.getMessage());
+        }
+    }
+
+    public static Connection getConnection() throws SQLException {
+        // Initialize database on first connection
+        if (!initialized) {
+            initialized = true;
+            initializeDatabase();
+        }
+        return DriverManager.getConnection(DB_URL);
+    }
+    
+    private static void initializeDatabase() {
+        try (Connection conn = DriverManager.getConnection(DB_URL);
+             Statement stmt = conn.createStatement()) {
+            
+            stmt.execute("CREATE TABLE IF NOT EXISTS users (" +
+                         "id INTEGER PRIMARY KEY, " +
+                         "username TEXT NOT NULL, " +
+                         "email TEXT NOT NULL, " +
+                         "password TEXT NOT NULL)");
+            System.out.println("Database initialized successfully");
+
+        } catch (SQLException e) {
+            System.err.println("Error initializing database: " + e.getMessage());
+        }
+    }
+}
 
 class UserManager {
-    private Map<Integer, User> users;
 
     public UserManager() {
-        this.users = new HashMap<>();
+        try {
+            DatabaseManager.getConnection().close();
+        } catch (SQLException e) {
+            System.err.println("Error initializing user manager: " + e.getMessage());
+        }
     }
 
     public User addUser(User user) {
@@ -204,45 +259,100 @@ class UserManager {
             return null;
         }
 
-        if (users.containsKey(user.getId())) {
+        if (getUser(user.getId()) != null) {
             return null;
         }
 
-        users.put(user.getId(), user);
-        return user;
+        try (Connection conn = DatabaseManager.getConnection();
+            PreparedStatement stmt = conn.prepareStatement(
+                "INSERT INTO users (id, username, email, password) VALUES (?, ?, ?, ?)")) {
+
+            stmt.setInt(1, user.getId());
+            stmt.setString(2, user.getUsername());
+            stmt.setString(3, user.getEmail());
+            stmt.setString(4, user.getPassword());
+
+            int rowsAffected = stmt.executeUpdate();
+            if (rowsAffected > 0) {
+                return user;
+            }
+            return null;
+        } catch (SQLException e) {
+            System.err.println("Error adding user: " + e.getMessage());
+            return null;
+        }
     }
 
     public User updateUser(int id, String username, String email, String password) {
-        User existingUser = users.get(id);
+        User existingUser = getUser(id);
         if (existingUser == null || id <= 0) {
             return null;
         }
 
-        User updatedUser = new User(
-            id, 
-            username != null ? username : existingUser.getUsername(),
-            email != null ? email : existingUser.getEmail(),
-            password != null ? password : existingUser.getPassword()
-        );
-        users.put(id, updatedUser);
-        return updatedUser;
+        try (Connection conn = DatabaseManager.getConnection();
+             PreparedStatement stmt = conn.prepareStatement(
+                 "UPDATE users SET username = ?, email = ?, password = ? WHERE id = ?")) {
+                 
+            stmt.setString(1, username != null ? username : existingUser.getUsername());
+            stmt.setString(2, email != null ? email : existingUser.getEmail());
+            stmt.setString(3, password != null ? password : existingUser.getPassword());
+            stmt.setInt(4, id);
+            
+            int rowsAffected = stmt.executeUpdate();
+            if (rowsAffected > 0) {
+                return getUser(id);
+            }
+            return null;
+        } catch (SQLException e) {
+            System.err.println("Error updating user: " + e.getMessage());
+            return null;
+        }
     }
 
     public boolean deleteUser(int id, String username, String email, String password) {
-        User existingUser = users.get(id);
+        User existingUser = getUser(id);
         if (existingUser == null ||
             !existingUser.getUsername().equals(username) ||
-            !existingUser.getEmail().equals(email) ||
-            !existingUser.getPassword().equals(password)) {
+            !existingUser.getEmail().equals(email)) {
             return false;
         }
 
-        users.remove(id);
-        return true;
+        try (Connection conn = DatabaseManager.getConnection();
+             PreparedStatement stmt = conn.prepareStatement(
+                 "DELETE FROM users WHERE id = ?")) {
+                 
+            stmt.setInt(1, id);
+            
+            int rowsAffected = stmt.executeUpdate();
+            return rowsAffected > 0;
+        } catch (SQLException e) {
+            System.err.println("Error deleting user: " + e.getMessage());
+            return false;
+        }
     }
 
     public User getUser(int id) {
-        return users.get(id);
+        try (Connection conn = DatabaseManager.getConnection();
+             PreparedStatement stmt = conn.prepareStatement(
+                 "SELECT * FROM users WHERE id = ?")) {
+                 
+            stmt.setInt(1, id);
+            
+            try (ResultSet rs = stmt.executeQuery()) {
+                if (rs.next()) {
+                    return new User(
+                        rs.getInt("id"),
+                        rs.getString("username"),
+                        rs.getString("email"),
+                        rs.getString("password")
+                    );
+                }
+                return null;
+            }
+        } catch (SQLException e) {
+            System.err.println("Error retrieving user: " + e.getMessage());
+            return null;
+        }
     }
 }
 

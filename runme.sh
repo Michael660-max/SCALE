@@ -3,32 +3,28 @@
 # Set the root directory
 ROOT_DIR=$(pwd)
 COMPILED_DIR="$ROOT_DIR/compiled"
+LIB_DIR="$ROOT_DIR/lib"
 
 # Ensure the compiled directory exists
 mkdir -p "$COMPILED_DIR"
 
 # Compilation function
 compile() {
-    # Compile Java files
-    # javac -d "$COMPILED_DIR" "$ROOT_DIR/src/OrderService/OrderService.java"
-    # javac -d "$COMPILED_DIR" "$ROOT_DIR/src/UserService/UserService.java"
-    # javac -d "$COMPILED_DIR" "$ROOT_DIR/src/ProductService/ProductService.java"
+    # Create directories if they don't exist
+    mkdir -p "$COMPILED_DIR/UserService"
+    mkdir -p "$COMPILED_DIR/ProductService"
+    mkdir -p "$COMPILED_DIR/OrderService"
 
+    # Compile with verbose output to see what's happening
     cd "$ROOT_DIR/src/OrderService" && javac -d "$COMPILED_DIR/OrderService" OrderService.java && cd "$ROOT_DIR"
     cd "$ROOT_DIR/src/UserService" && javac -d "$COMPILED_DIR/UserService" UserService.java && cd "$ROOT_DIR"
     cd "$ROOT_DIR/src/ProductService" && javac -d "$COMPILED_DIR/ProductService" ProductService.java && cd "$ROOT_DIR"
 
-    # If a 'src' folder was created inside 'compiled', move its contents up and delete it
-    if [ -d "$COMPILED_DIR/src" ]; then
-        mv "$COMPILED_DIR/src/"* "$COMPILED_DIR/"  # Move contents up
-        rm -r "$COMPILED_DIR/src"                 # Remove 'src' folder
-    fi
-
+    # Copy config files
     if [ -f "$ROOT_DIR/config.json" ]; then
         cp "$ROOT_DIR/config.json" "$COMPILED_DIR/UserService"
         cp "$ROOT_DIR/config.json" "$COMPILED_DIR/ProductService"
         cp "$ROOT_DIR/config.json" "$COMPILED_DIR/OrderService"
-
     else
         echo "Warning: config.json not found in root directory!"
     fi
@@ -36,16 +32,16 @@ compile() {
 
 # Start services
 start_user_service() {
-    java -cp "$COMPILED_DIR/UserService" UserService config.json
-    # echo "COMPILED_DIR: $COMPILED_DIR"
+    cd "$COMPILED_DIR/UserService"
+    java -cp ".;$LIB_DIR//sqlite-jdbc-3.49.1.0.jar;$LIB_DIR/*" UserService config.json
 }
 
 start_product_service() {
-    java -cp "$COMPILED_DIR/ProductService" ProductService config.json
+    cd "$COMPILED_DIR/ProductService" && java -cp ".;$LIB_DIR/*" ProductService config.json
 }
 
 start_order_service() {
-    java -cp "$COMPILED_DIR/OrderService" OrderService config.json
+    cd "$COMPILED_DIR/OrderService" && java -cp ".;$LIB_DIR/*" OrderService config.json
 }
 
 start_workload() {

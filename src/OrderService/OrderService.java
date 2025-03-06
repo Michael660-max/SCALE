@@ -4,6 +4,8 @@ import com.sun.net.httpserver.HttpServer;
 import java.io.*;
 import java.net.HttpURLConnection;
 import java.net.InetSocketAddress;
+import java.net.URI;
+import java.net.URISyntaxException;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -142,7 +144,11 @@ class UserHandler implements HttpHandler {
         // System.out.println(userServerUrl);
         
         if ("POST".equalsIgnoreCase(method) || "GET".equalsIgnoreCase(method)) {
-            forwardRequest(exchange, userServerUrl);
+            try {
+                forwardRequest(exchange, userServerUrl);
+            } catch (IOException | URISyntaxException e) {
+                e.printStackTrace();
+            }
         } else {
             String errorMessage = "Method not supported";
             exchange.sendResponseHeaders(405, errorMessage.length());
@@ -152,10 +158,11 @@ class UserHandler implements HttpHandler {
         }
     }
 
-    private void forwardRequest(HttpExchange exchange, String targetUrl) throws IOException {
+    private void forwardRequest(HttpExchange exchange, String targetUrl) throws IOException, URISyntaxException {
         try {
             // Create connection to target server
-            URL url = new URL(targetUrl);
+            URI uri = new URI(targetUrl);
+            URL url = uri.toURL();
             HttpURLConnection conn = (HttpURLConnection) url.openConnection();
             conn.setRequestMethod(exchange.getRequestMethod());
             
@@ -219,7 +226,11 @@ class ProductHandler implements HttpHandler {
             exchange.getRequestURI().getPath());
         
         if ("POST".equalsIgnoreCase(method) || "GET".equalsIgnoreCase(method)) {
-            forwardRequest(exchange, productServerUrl);
+            try {
+                forwardRequest(exchange, productServerUrl);
+            } catch (IOException | URISyntaxException e) {
+                e.printStackTrace();
+            }
         } else {
             String errorMessage = "Method not supported";
             exchange.sendResponseHeaders(405, errorMessage.length());
@@ -229,10 +240,11 @@ class ProductHandler implements HttpHandler {
         }
     }
 
-    private void forwardRequest(HttpExchange exchange, String targetUrl) throws IOException {
+    private void forwardRequest(HttpExchange exchange, String targetUrl) throws IOException, URISyntaxException {
         try {
             // Create connection to target server
-            URL url = new URL(targetUrl);
+            URI uri = new URI(targetUrl);
+            URL url = uri.toURL();
             HttpURLConnection conn = (HttpURLConnection) url.openConnection();
             conn.setRequestMethod(exchange.getRequestMethod());
             
@@ -395,12 +407,18 @@ class OrderHandler implements HttpHandler {
                 String value = keyValue[1].trim();
     
                 // Try parsing as a number
-                if (value.matches("-?\\d+")) {
+                if (value.matches("-?\\d+")) {  // Integer
                     map.put(key, Integer.parseInt(value));
-                } else if (value.matches("-?\\d+\\.\\d+")) {
+                } else if (value.matches("-?\\d+\\.\\d+")) {  // Double
                     map.put(key, Double.parseDouble(value));
+                } else if ("true".equalsIgnoreCase(value)) {  // Boolean true
+                    map.put(key, Boolean.TRUE);
+                } else if ("false".equalsIgnoreCase(value)) {  // Boolean false
+                    map.put(key, Boolean.FALSE);
+                } else if ("null".equalsIgnoreCase(value)) {  // null
+                    map.put(key, null);
                 } else {
-                    map.put(key, value); // Treat as string otherwise
+                    map.put(key, value);  // String
                 }
             }
         }
@@ -523,7 +541,7 @@ class OrderHandler implements HttpHandler {
             os.write(responseBytes);
         }
     }
-    private Product getProduct(int productId) throws IOException {
+    private Product getProduct(int productId) throws IOException, URISyntaxException {
         // Check cache first
         Product cachedProduct = productCache.get(productId);
         if (cachedProduct != null) {
@@ -545,7 +563,7 @@ class OrderHandler implements HttpHandler {
         return null;
     }
 
-    private boolean checkUserExists(int userId) throws IOException {
+    private boolean checkUserExists(int userId) throws IOException, URISyntaxException {
         if (validUserIds.contains(userId)) {
             return true;
         }
@@ -563,8 +581,9 @@ class OrderHandler implements HttpHandler {
         return false;
     }
 
-    private String sendGetRequest(String urlString) throws IOException {
-        URL url = new URL(urlString);
+    private String sendGetRequest(String urlString) throws IOException, URISyntaxException {
+        URI uri = new URI(urlString);
+        URL url = uri.toURL();
         HttpURLConnection conn = (HttpURLConnection) url.openConnection();
         conn.setRequestMethod("GET");
         
@@ -586,8 +605,9 @@ class OrderHandler implements HttpHandler {
         // return null;
     }
 
-    private String sendPostRequest(String urlString, String jsonBody) throws IOException {
-        URL url = new URL(urlString);
+    private String sendPostRequest(String urlString, String jsonBody) throws IOException, URISyntaxException {
+        URI uri = new URI(urlString);
+        URL url = uri.toURL();
         HttpURLConnection conn = (HttpURLConnection) url.openConnection();
         conn.setRequestMethod("POST");
         conn.setDoOutput(true);
