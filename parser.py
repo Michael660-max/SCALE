@@ -25,8 +25,8 @@ def construct_service_url(service_name, endpoint):
 
 # Dynamically construct base URLs
 ORDER_SERVICE_URL = construct_service_url("OrderService", "order")
-USER_SERVICE_URL = construct_service_url("OrderService", "user")
-PRODUCT_SERVICE_URL = construct_service_url("OrderService", "product")
+USER_SERVICE_URL = construct_service_url("UserService", "user")
+PRODUCT_SERVICE_URL = construct_service_url("ProductService", "product")
 
 def parse_workload(file_path):
     """
