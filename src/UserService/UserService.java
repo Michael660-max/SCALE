@@ -148,6 +148,7 @@ class User {
         this.username = username;
         this.email = email;
         this.password = password;
+        this.purchasedProducts = new HashMap<>(); // added this to initialize the map --> saw current impl. led to an error.
     }
 
     // Getters and setters remain the same
@@ -299,7 +300,13 @@ class UserHandler implements HttpHandler {
 
     private void handleGetPurchased(HttpExchange exchange) throws IOException {
         String path = exchange.getRequestURI().getPath();
-        int userId = Integer.parseInt(path.split("/")[2]);
+        // int userId = Integer.parseInt(path.split("/")[2]);
+        String[] pathParts = path.split("/");
+        if (pathParts.length < 3) {
+            sendErrorResponse(exchange, 400, "Invalid path");
+            return;
+        }
+        int userId = Integer.parseInt(pathParts[2]);
 
         User user = userManager.getUser(userId);
         if (user == null) {
@@ -319,8 +326,8 @@ class UserHandler implements HttpHandler {
         }
         jsonResponse.append("}");
 
-        // sendResponse(exchange, 200, jsonResponse.toString());
-        sendResponse(exchange, 200, "jsonResponse.toString()");
+        sendResponse(exchange, 200, jsonResponse.toString());
+        // sendResponse(exchange, 200, "jsonResponse.toString()");
     }
 
     private void handlePost(HttpExchange exchange) throws IOException {
