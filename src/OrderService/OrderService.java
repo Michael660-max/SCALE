@@ -416,7 +416,7 @@ class OrderHandler implements HttpHandler {
             // System.out.println(commandMap);
             // Extract and validate command
             String command = (String) commandMap.get("command");
-            if (!"place".equals(command)) {
+            if (!"place order".equals(command)) {
                 sendErrorResponse(exchange, "Invalid Command");
                 return;
             }
