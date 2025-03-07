@@ -674,7 +674,7 @@ class OrderHandler implements HttpHandler {
         String requestBody = new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8);
         // System.out.println("reqbody" + requestBody);
         
-        // try {
+        try {
             // Clean up the input string and parse JSON
             Map<String, Object> commandMap = parseJson(requestBody);
             // System.out.println("commandmap: " + commandMap);
@@ -690,6 +690,7 @@ class OrderHandler implements HttpHandler {
             int userId = ((Number) commandMap.get("user_id")).intValue();
             int quantity = ((Number) commandMap.get("quantity")).intValue();
             // System.out.println("productid: " + productId + " userID: " + userId + " quantity: " + quantity);
+
 
             // Check for invalid inputs (-1)
             if (productId == -1 || userId == -1 || quantity == -1) {
@@ -707,10 +708,9 @@ class OrderHandler implements HttpHandler {
             Product product = getProduct(productId);
             if (product == null) {
                 // System.out.println("NULL");
-                sendErrorResponse(exchange, "Not in Database");
+                sendErrorResponse(exchange, "Invalid Request");
                 return;
             }
-            // System.out.println("productid: " + product.getId() + " quantity: " + product.getQuantity());
             if (product == null) {
                 sendErrorResponse(exchange, "Invalid Request");
                 return;
@@ -765,6 +765,7 @@ class OrderHandler implements HttpHandler {
             String responseOrder = sendPostRequest(userServiceUrl, purchaseJson);
 
             if (responseOrder == null) {
+
                 sendErrorResponse(exchange, "Failed to update user purchase history");
                 return;
             }
@@ -772,9 +773,9 @@ class OrderHandler implements HttpHandler {
             // Send success response with order details
             sendSuccessResponse(exchange, order);
     
-        // } catch (Exception e) {
-        //     sendErrorResponse(exchange, "Invalid Request");
-        // }
+        } catch (Exception e) {
+            sendErrorResponse(exchange, "Invalid Request");
+        }
     }
     
     private void sendErrorResponse(HttpExchange exchange, String status) throws IOException {
@@ -886,7 +887,7 @@ class OrderHandler implements HttpHandler {
         conn.setRequestMethod("POST");
         conn.setDoOutput(true);
         conn.setRequestProperty("Content-Type", "application/json");
-
+        
         try (OutputStream os = conn.getOutputStream()) {
             byte[] input = jsonBody.getBytes(StandardCharsets.UTF_8);
             os.write(input, 0, input.length);

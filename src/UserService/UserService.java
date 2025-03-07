@@ -486,7 +486,7 @@ class UserHandler implements HttpHandler {
         }
         switch (command) {
             case "create" -> handleCreateUser(exchange, requestData);
-            case "update" -> handleUpdateUser(exchange, requestData);
+            case "update" -> handleUpdateUser(exchange, requestData); 
             case "delete" -> handleDeleteUser(exchange, requestData);
             default -> sendErrorResponse(exchange, 400, "");
         }

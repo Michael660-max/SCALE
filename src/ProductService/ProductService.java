@@ -303,7 +303,7 @@ class ProductManager {
 
     public boolean deleteProduct(int id, String name, Double price, Integer quantity) {
         Product product = getProduct(id);
-        if (product != null) {
+        if (product != null && name != null) {
             boolean matches = (name.equals(product.getName())) &&
                               (price.equals(product.getPrice())) &&
                               (quantity.equals(product.getQuantity()));
@@ -456,7 +456,7 @@ class ProductHandler implements HttpHandler {
             Double price = requestData.containsKey("price") ? Double.parseDouble(requestData.get("price")) : null;
             Integer quantity = requestData.containsKey("quantity") ? Integer.parseInt(requestData.get("quantity")) : null;
             
-            if (name == null || price < 0 || quantity < 0 || description == null) {
+            if (price != null && price < 0 || quantity != null && quantity < 0 ) {
                 sendErrorResponse(exchange, 400, "");
                 return;
             }
@@ -481,7 +481,7 @@ class ProductHandler implements HttpHandler {
             Double price = requestData.containsKey("price") ? Double.parseDouble(requestData.get("price")) : null;
             Integer quantity = requestData.containsKey("quantity") ? Integer.parseInt(requestData.get("quantity")) : null;
 
-            if (!productManager.deleteProduct(id, name, price, quantity)) {
+            if (name == null || !productManager.deleteProduct(id, name, price, quantity)) {
                 sendErrorResponse(exchange, 404, "" );
                 return;
             }
