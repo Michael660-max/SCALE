@@ -303,7 +303,7 @@ class UserHandler implements HttpHandler {
         int userId = Integer.parseInt(path.split("/")[3]);
         User user = userManager.getUser(userId);
         if (user == null) {
-            sendErrorResponse(exchange, 404, "User not found");
+            sendErrorResponse(exchange, 404, "");
             return;
         }
 
