@@ -138,7 +138,7 @@ public class OrderService {
         server.createContext("/user", new UserHandler());
         server.createContext("/order", new OrderHandler());
         server.createContext("/shutdown", new ShutdownHandler(server));
-        server.createContext("/restart", new RestartHandler());    
+        server.createContext("/restart", new RestartHandler());
         server.setExecutor(null);
         server.start();
         System.out.println("OrderService started on port " + PORT);
@@ -153,6 +153,7 @@ public class OrderService {
 
         @Override
         public void handle(HttpExchange exchange) throws IOException {
+            new File("shutdown_flag.txt").createNewFile();
             String response = "{\"status\":\"shutting_down\"}";
             exchange.getResponseHeaders().add("Content-Type", "application/json");
             exchange.sendResponseHeaders(200, response.length());
@@ -197,7 +198,8 @@ public class OrderService {
     static {
         // Check if restart was the first command after startup
         File restartFlag = new File("restart_flag.txt");
-        if (!restartFlag.exists()) {
+        File shutdownFlag = new File("shutdown_flag.txt");
+        if (!restartFlag.exists() && shutdownFlag.exists()) {
             // No restart flag, so wipe all databases
             System.out.println("No restart flag detected - wiping all databases");
             

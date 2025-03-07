@@ -144,11 +144,49 @@ public class UserService {
         HttpServer server = HttpServer.create(new InetSocketAddress(bindAddress, PORT), 0);
         server.createContext("/user", new UserHandler());
         server.createContext("/shutdown", new ShutdownHandler(server));
-        server.createContext("/restart", new RestartHandler());    
+        server.createContext("/restart", new RestartHandler());
         server.setExecutor(java.util.concurrent.Executors.newFixedThreadPool(10));
         server.start();
         
         System.out.println("UserService started on " + bindAddress + ":" + PORT);
+    }
+
+    static class ShutdownHandler implements HttpHandler {
+        private final HttpServer server;
+        
+        public ShutdownHandler(HttpServer server) {
+            this.server = server;
+        }
+        
+        @Override
+        public void handle(HttpExchange exchange) throws IOException {
+            String response = "{\"status\":\"shutting_down\"}";
+            exchange.getResponseHeaders().add("Content-Type", "application/json");
+            exchange.sendResponseHeaders(200, response.length());
+            try (OutputStream os = exchange.getResponseBody()) {
+                os.write(response.getBytes());
+            }
+            
+            // Simple shutdown - SQLite automatically persists data
+            System.out.println("Shutdown command received, shutting down UserService");
+            server.stop(0);
+        }
+    }
+    
+    static class RestartHandler implements HttpHandler {
+        @Override
+        public void handle(HttpExchange exchange) throws IOException {
+            // For UserService, we just need to acknowledge the restart command
+            // Only OrderService needs special handling for determining data persistence
+            String response = "{\"status\":\"restart_received\"}";
+            exchange.getResponseHeaders().add("Content-Type", "application/json");
+            exchange.sendResponseHeaders(200, response.length());
+            try (OutputStream os = exchange.getResponseBody()) {
+                os.write(response.getBytes());
+            }
+            
+            System.out.println("Restart command received by UserService");
+        }
     }
 }
 

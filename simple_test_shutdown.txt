@@ -1,4 +1,4 @@
 USER create 1 alice alice@example.com secret123
-PRODUCT create 1 laptop "High-performance laptop" 999.99 10
+PRODUCT create 1 laptop High-performance 999.99 10
 ORDER place 1 1 2
 shutdown

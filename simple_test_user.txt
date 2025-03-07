@@ -9,5 +9,5 @@ PRODUCT update 101 name:WidgetPlus description:AdvancedWidget price:24.99 quanti
 PRODUCT info 101
 PRODUCT create 1 Widget BasicWidget 19.99 50
 USER create 1 alice alice@example.com secret123
-ORDER 1 1 1 
+ORDER 1 1 1
 USER get 1
