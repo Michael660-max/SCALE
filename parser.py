@@ -136,7 +136,7 @@ def handle_product_action(action, params):
 def handle_order_action(action, params):
     if action == "place":
         data = {
-            "command": "place",
+            "command": "place order",
             "product_id": int(params[0]) if len(params) > 0 else -1,
             "user_id": int(params[1]) if len(params) > 1 else -1,
             "quantity": int(params[2]) if len(params) > 2 else -1
@@ -149,7 +149,7 @@ def handle_order_action(action, params):
 def print_response(action, response):
     print(f"{action} RESPONSE: {response.status_code}")
     if response.status_code == 200:
-        if response.headers.get('Content-Type') == 'application/json':
+        if (response.headers.get('Content-Type') == 'application/json' and response.text):
             print(response.json())
         else:
             print(response.text)
