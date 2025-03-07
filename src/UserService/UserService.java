@@ -199,13 +199,13 @@ class User {
             // For GET requests, exclude command field
             return String.format(
                 "{\"id\":%d,\"username\":\"%s\",\"email\":\"%s\",\"password\":\"%s\"}",
-                id, username, email, password
+                id, username, email, hashPassword(password)
             );
         } else {
             // For CREATE and UPDATE requests, include command field
             return String.format(
                 "{\"id\":%d,\"username\":\"%s\",\"email\":\"%s\",\"password\":\"%s\",\"command\":\"%s\"}",
-                id, username, email, password, command
+                id, username, email, hashPassword(password), command
             );
         }
     }
