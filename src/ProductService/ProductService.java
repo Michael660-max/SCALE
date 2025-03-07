@@ -98,7 +98,6 @@ public class ProductService {
 
     public static void main(String[] args) throws IOException {
         loadConfig(args.length > 0 ? args[0] : null);
-        System.out.println("PORT: " + PORT);
         HttpServer server = HttpServer.create(new InetSocketAddress(PORT), 0);
 
         // Use IP from config, defaulting to 0.0.0.0 if not set
@@ -209,21 +208,17 @@ class ProductManager {
     }
 
     public Product addProduct(Product product) {
-        System.out.println("REACHED addProduct");
         if (product.getName() == null || product.getName().trim().isEmpty()) {
-            System.out.println("RETURN NULL");
             return null;
         }
-        System.out.println("SECOND IF");
         if (getProduct(product.getId()) != null) {
-            System.out.println("RETURN NULL");
             return null;
         }
-        System.out.println("BEFORE TRY");
+
         try (Connection conn = DatabaseManager.getConnection();
             PreparedStatement stmt = conn.prepareStatement(
                 "INSERT INTO products (id, name, description, price, quantity) VALUES (?, ?, ?, ?, ?)")) {
-            System.out.println("INSIDE TRY");
+  
             stmt.setInt(1, product.getId());
             stmt.setString(2, product.getName());
             stmt.setString(3, product.getDescription());
@@ -232,10 +227,8 @@ class ProductManager {
 
             int rowsAffected = stmt.executeUpdate();
             if (rowsAffected > 0) {
-                System.out.println("ROWS AFFECTED: " + rowsAffected);
                 return product;
             }
-            System.out.println("BOTTOM NULL RETURN");
             return null;
         } catch (SQLException e) {
             System.err.println("Error adding product: " + e.getMessage());
@@ -244,13 +237,12 @@ class ProductManager {
     }
 
     public Product updateProduct(int id, String name, String description, Double price, Integer quantity) {
-        System.out.println("IN UPDATE PRODUCT");
+
         Product existingProduct = getProduct(id);
 
         if (existingProduct == null || id <= 0) {
             return null;
         }
-        System.out.println("BEFORE TRY");
         try (Connection conn = DatabaseManager.getConnection();
              PreparedStatement stmt = conn.prepareStatement(
                  "UPDATE products SET name = ?, description = ?, price = ?, quantity = ? WHERE id = ?")) {

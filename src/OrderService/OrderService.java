@@ -12,6 +12,14 @@ import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
+import java.sql.Connection;
+import java.sql.DriverManager;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.sql.Statement;
+import java.util.HashMap;
+import java.util.Map;
 
 public class OrderService {
     private static int PORT;
@@ -56,8 +64,6 @@ public class OrderService {
         }
     }
     
-
-    
     /** 
      * @param json
      * @return Map<String, Map<String, String>>
@@ -94,7 +100,6 @@ public class OrderService {
         return result;
     }
     
-
     private static Map<String, String> parseInnerObject(String json) {
         Map<String, String> result = new HashMap<>();
         
@@ -119,17 +124,27 @@ public class OrderService {
     }
 
     public static void main(String[] args) throws IOException {
-        // loadConfig(args[0]);
-        loadConfig(null);
-        HttpServer server = HttpServer.create(new InetSocketAddress(PORT), 0);
+        loadConfig(args.length > 0 ? args[0] : null);
+
+        // Use IP from config, defaulting to 0.0.0.0 if not set
+        String bindAddress = (IP != null && !IP.isEmpty()) ? IP : "0.0.0.0";
+        
+        // Ensure PORT is valid
+        if (PORT <= 0) {
+            PORT = 14000; // Default port
+        }
+        
+        HttpServer server = HttpServer.create(new InetSocketAddress(bindAddress, PORT), 0);
         server.createContext("/product", new ProductHandler());
         server.createContext("/user", new UserHandler());
         server.createContext("/order", new OrderHandler());
-        server.setExecutor(null);
+        server.setExecutor(java.util.concurrent.Executors.newFixedThreadPool(10));
         server.start();
         System.out.println("OrderService started on port " + PORT);
     }
 }
+
+
 class UserHandler implements HttpHandler {
     @Override
     public void handle(HttpExchange exchange) throws IOException {
@@ -340,21 +355,112 @@ class Product {
         return map;
     }
 }
+
+class UserDatabaseManager {
+    private static final String DB_URL = "jdbc:sqlite:../UserService/users.db";
+    
+    static {
+        try {
+            Class.forName("org.sqlite.JDBC");
+            System.out.println("SQLite JDBC driver loaded successfully");
+        } catch (ClassNotFoundException e) {
+            System.err.println("Error loading SQLite driver: " + e.getMessage());
+        }
+    }
+
+    public static Connection getConnection() throws SQLException {
+        return DriverManager.getConnection(DB_URL);
+    }
+}
+
+class DatabaseManager {
+    private static final String DB_URL = "jdbc:sqlite:orders.db";
+    private static boolean initialized = false;
+    
+    static {
+        try {
+            Class.forName("org.sqlite.JDBC");
+            System.out.println("SQLite JDBC driver loaded successfully");
+        } catch (ClassNotFoundException e) {
+            System.err.println("Error loading SQLite driver: " + e.getMessage());
+        }
+    }
+
+    public static Connection getConnection() throws SQLException {
+        // Initialize database on first connection
+        if (!initialized) {
+            initialized = true;
+            initializeDatabase();
+        }
+        return DriverManager.getConnection(DB_URL);
+    }
+    
+    private static void initializeDatabase() {
+        try (Connection conn = DriverManager.getConnection(DB_URL);
+             Statement stmt = conn.createStatement()) {
+            stmt.execute("CREATE TABLE IF NOT EXISTS orders (" +
+                         "id INT PRIMARY KEY," +
+                         "product_id INT NOT NULL, " +
+                         "user_id INT NOT NULL, " +
+                         "quantity INT NOT NULL)");
+            System.out.println("Database initialized successfully");
+
+        } catch (SQLException e) {
+            System.err.println("Error initializing database: " + e.getMessage());
+        }
+    }
+}
+
+class ProductDatabaseManager {
+    private static final String DB_URL = "jdbc:sqlite:../ProductService/products.db";
+    
+    static {
+        try {
+            Class.forName("org.sqlite.JDBC");
+            System.out.println("SQLite JDBC driver loaded successfully");
+        } catch (ClassNotFoundException e) {
+            System.err.println("Error loading SQLite driver: " + e.getMessage());
+        }
+    }
+
+    public static Connection getConnection() throws SQLException {
+        return DriverManager.getConnection(DB_URL);
+    }
+}
+
 class Order {
     private static int nextId = 1;
-    final int id;
+    public int id;
     final int productId;
     final int userId;
     final int quantity;
     final String status;
 
    public Order(int productId, int userId, int quantity, String status) {
-       this.id = nextId++;
-       this.productId = productId;
-       this.userId = userId;
-       this.quantity = quantity;
-       this.status = status;
+        this.id = nextId++;
+        try (Connection conn = DatabaseManager.getConnection();
+             PreparedStatement stmt = conn.prepareStatement(
+                 "SELECT MAX(id) FROM orders")) {
+            
+            try (ResultSet rs = stmt.executeQuery()) {
+                if (rs.next()) {
+                    this.id = rs.getInt(1) + 1;
+                }
+            }
+        } catch (SQLException e) {
+            System.err.println("Error retrieving product: " + e.getMessage());
+        }
+        // System.out.println("this id: " + this.id);
+        this.productId = productId;
+        this.userId = userId;
+        this.quantity = quantity;
+        this.status = status;
    }
+
+    public int getId() { return id; }
+    public int getProductID() { return productId; }
+    public int getUserID() { return userId; }
+    public int getQuantity() { return quantity; }
 
    public String toJson() {
        return String.format(
@@ -365,21 +471,64 @@ class Order {
 }
 
 class OrderManager {
-    private final List<Order> orders = Collections.synchronizedList(new ArrayList<>());
+
+    public OrderManager() {
+        try {
+            DatabaseManager.getConnection().close();
+        } catch (SQLException e) {
+            System.err.println("Error initializing user manager: " + e.getMessage());
+        }
+    }
 
     public void addOrder(Order order) {
-        orders.add(order);
+        try (Connection conn = DatabaseManager.getConnection();
+            PreparedStatement stmt = conn.prepareStatement(
+                "INSERT INTO orders (id, product_id, user_id, quantity) VALUES (?, ?, ?, ?)")) {
+            stmt.setInt(1, order.getId());
+            stmt.setInt(2, order.getProductID());
+            stmt.setInt(3, order.getUserID());
+            stmt.setInt(4, order.getQuantity());
+
+            int rowsAffected = stmt.executeUpdate();
+            if (rowsAffected <= 0) {
+                System.err.println("No order database rows affected.");
+                return;
+            }
+        } catch (SQLException e) {
+            System.err.println("Error adding order: " + e.getMessage());
+            return;
+        }
     }
 
-    public List<Order> getOrders() {
-        return orders;
-    }
+    // public List<Order> getOrders() {
+    //     try (Connection conn = DatabaseManager.getConnection();
+    //          PreparedStatement stmt = conn.prepareStatement(
+    //              "SELECT * FROM orders WHERE id = ?")) {
+                 
+    //         stmt.setInt(1, id);
+            
+    //         try (ResultSet rs = stmt.executeQuery()) {
+    //             if (rs.next()) {
+    //                 return new User(
+    //                     rs.getInt("id"),
+    //                     rs.getString("username"),
+    //                     rs.getString("email"),
+    //                     rs.getString("password")
+    //                 );
+    //             }
+    //             return null;
+    //         }
+    //     } catch (SQLException e) {
+    //         System.err.println("Error retrieving user: " + e.getMessage());
+    //         return null;
+    //     }
+    // }
 }
 
 
 class OrderHandler implements HttpHandler {
+    private static OrderManager orderManager = new OrderManager();
     private final Map<Integer, Product> productCache = new ConcurrentHashMap<>();
-    private final Set<Integer> validUserIds = Collections.synchronizedSet(new HashSet<>());
 
     @Override
     public void handle(HttpExchange exchange) throws IOException {
@@ -425,13 +574,14 @@ class OrderHandler implements HttpHandler {
         return map;
     }
 
-    private void handleOrderCommand(HttpExchange exchange) throws IOException {
+    private void handleOrderCommand(HttpExchange exchange) throws IOException, URISyntaxException {
         String requestBody = new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8);
+        // System.out.println("reqbody" + requestBody);
         
-        try {
+        // try {
             // Clean up the input string and parse JSON
             Map<String, Object> commandMap = parseJson(requestBody);
-            // System.out.println(commandMap);
+            // System.out.println("commandmap: " + commandMap);
             // Extract and validate command
             String command = (String) commandMap.get("command");
             if (!"place".equals(command)) {
@@ -443,7 +593,8 @@ class OrderHandler implements HttpHandler {
             int productId = ((Number) commandMap.get("product_id")).intValue();
             int userId = ((Number) commandMap.get("user_id")).intValue();
             int quantity = ((Number) commandMap.get("quantity")).intValue();
-    
+            // System.out.println("productid: " + productId + " userID: " + userId + " quantity: " + quantity);
+
             // Check for invalid inputs (-1)
             if (productId == -1 || userId == -1 || quantity == -1) {
                 sendErrorResponse(exchange, "Invalid Request");
@@ -458,6 +609,12 @@ class OrderHandler implements HttpHandler {
     
             // Check if product exists and get its current state
             Product product = getProduct(productId);
+            if (product == null) {
+                // System.out.println("NULL");
+                sendErrorResponse(exchange, "Not in Database");
+                return;
+            }
+            // System.out.println("productid: " + product.getId() + " quantity: " + product.getQuantity());
             if (product == null) {
                 sendErrorResponse(exchange, "Invalid Request");
                 return;
@@ -474,9 +631,11 @@ class OrderHandler implements HttpHandler {
                 sendErrorResponse(exchange, "Exceeded quantity limit");
                 return;
             }
-    
+
+
             // Create Order object
             Order order = new Order(productId, userId, quantity, "Success");
+            orderManager.addOrder(order);
     
             // Update product quantity
             int newQuantity = product.getQuantity() - quantity;
@@ -503,9 +662,9 @@ class OrderHandler implements HttpHandler {
             // Send success response with order details
             sendSuccessResponse(exchange, order);
     
-        } catch (Exception e) {
-            sendErrorResponse(exchange, "Invalid Request");
-        }
+        // } catch (Exception e) {
+        //     sendErrorResponse(exchange, "Invalid Request");
+        // }
     }
     
     private void sendErrorResponse(HttpExchange exchange, String status) throws IOException {
@@ -541,44 +700,49 @@ class OrderHandler implements HttpHandler {
             os.write(responseBytes);
         }
     }
-    private Product getProduct(int productId) throws IOException, URISyntaxException {
-        // Check cache first
-        Product cachedProduct = productCache.get(productId);
-        if (cachedProduct != null) {
-            return cachedProduct;
-        }
+    private Product getProduct(int id) throws IOException, URISyntaxException  {
+        try (Connection conn = ProductDatabaseManager.getConnection();
+             PreparedStatement stmt = conn.prepareStatement(
+                 "SELECT * FROM products WHERE id = ?")) {
+                 
+            stmt.setInt(1, id);
 
-        // If not in cache, fetch from product service
-        String productUrl = String.format("http://%s:%s/product/%d",
-            OrderService.PRODUCT_SERVER_IP,
-            OrderService.PRODUCT_SERVER_PORT,
-            productId);
-
-        String response = sendGetRequest(productUrl);
-        if (response != null) {
-            Product product = Product.fromJson(response);
-            productCache.put(productId, product);
-            return product;
+            try (ResultSet rs = stmt.executeQuery()) {
+                // System.out.println("IN RESULTSET, rs: " + rs);
+                if (rs.next()) {
+                    return new Product(
+                        rs.getInt("id"),
+                        rs.getString("name"),
+                        rs.getString("description"),
+                        rs.getDouble("price"),
+                        rs.getInt("quantity")
+                    );
+                }
+                return null;
+            }
+        } catch (SQLException e) {
+            System.err.println("Error retrieving product: " + e.getMessage());
+            return null;
         }
-        return null;
     }
 
-    private boolean checkUserExists(int userId) throws IOException, URISyntaxException {
-        if (validUserIds.contains(userId)) {
-            return true;
-        }
+    private boolean checkUserExists(int id) throws IOException, URISyntaxException {
+        try (Connection conn = UserDatabaseManager.getConnection();
+             PreparedStatement stmt = conn.prepareStatement(
+                 "SELECT * FROM users WHERE id = ?")) {
+                 
+            stmt.setInt(1, id);
 
-        String userUrl = String.format("http://%s:%s/user/%d",
-            OrderService.USER_SERVER_IP,
-            OrderService.USER_SERVER_PORT,
-            userId);
-
-        String response = sendGetRequest(userUrl);
-        if (response != null) {
-            validUserIds.add(userId);
-            return true;
+            try (ResultSet rs = stmt.executeQuery()) {
+                if (rs.next()) {
+                    return true;
+                }
+                return false;
+            }
+        } catch (SQLException e) {
+            System.err.println("Error retrieving product: " + e.getMessage());
+            return false;
         }
-        return false;
     }
 
     private String sendGetRequest(String urlString) throws IOException, URISyntaxException {

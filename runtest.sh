@@ -26,9 +26,9 @@ start_order_service() {
 
 test_product_service() {
     $ROOT_DIR/runme.sh -c
-    # $ROOT_DIR/runtest.sh -restart
-    $ROOT_DIR/runme.sh -p &
-    python3 parser.py simple_test_product.txt
+    $ROOT_DIR/runtest.sh -start
+    # $ROOT_DIR/runme.sh -p &
+    python3 parser.py simple_test_order.txt
     $ROOT_DIR/runtest.sh -end
 }
 
