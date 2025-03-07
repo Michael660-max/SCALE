@@ -416,7 +416,7 @@ class OrderHandler implements HttpHandler {
             // System.out.println(commandMap);
             // Extract and validate command
             String command = (String) commandMap.get("command");
-            if (!"place".equals(command) || !"place order".equals(command)) {
+            if (!"place".equals(command)) {
                 sendErrorResponse(exchange, "Invalid Command");
                 return;
             }
@@ -481,6 +481,20 @@ class OrderHandler implements HttpHandler {
             // Update cache with new quantity
             product.setQuantity(newQuantity);
             productCache.put(productId, product);
+
+            // Update user's purchase history in UserService
+            String userServiceUrl = String.format("http://%s:%s/user/%d/purchase",
+            OrderService.USER_SERVER_IP,
+            OrderService.USER_SERVER_PORT,
+            userId);
+
+            String purchaseJson = String.format("{\"product_id\":%d,\"quantity\":%d}", productId, quantity);
+            String responseOrder = sendPostRequest(userServiceUrl, purchaseJson);
+
+            if (responseOrder == null) {
+                sendErrorResponse(exchange, "Failed to update user purchase history");
+                return;
+            }
     
             // Send success response with order details
             sendSuccessResponse(exchange, order);
