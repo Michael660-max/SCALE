@@ -280,6 +280,9 @@ class ProductManager {
         if (existingProduct == null || id <= 0) {
             return null;
         }
+        if (description.trim().isEmpty()) {
+            return null;
+        }
         try (Connection conn = DatabaseManager.getConnection();
              PreparedStatement stmt = conn.prepareStatement(
                  "UPDATE products SET name = ?, description = ?, price = ?, quantity = ? WHERE id = ?")) {
@@ -517,6 +520,7 @@ class ProductHandler implements HttpHandler {
     }
 
     private void sendResponse(HttpExchange exchange, int statusCode, String response) throws IOException {
+        exchange.getResponseHeaders().set("Content-Type", "application/json");
         byte[] responseBytes = response.getBytes(StandardCharsets.UTF_8);
         exchange.sendResponseHeaders(statusCode, responseBytes.length);
         try (OutputStream os = exchange.getResponseBody()) {
