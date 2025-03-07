@@ -264,7 +264,7 @@ class UserHandler implements HttpHandler {
         String method = exchange.getRequestMethod();
         String path = exchange.getRequestURI().getPath();
 
-        if ("POST".equalsIgnoreCase(method) && path.matches("/user/purchase")) {
+        if ("POST".equalsIgnoreCase(method) && path.matches("/user/\\d+/purchase")) {
             handleAddPurchase(exchange);
         } else if ("GET".equalsIgnoreCase(method) && path.matches("/user/purchased")) {
             handleGetPurchased(exchange);
@@ -319,7 +319,8 @@ class UserHandler implements HttpHandler {
         }
         jsonResponse.append("}");
 
-        sendResponse(exchange, 200, jsonResponse.toString());
+        // sendResponse(exchange, 200, jsonResponse.toString());
+        sendResponse(exchange, 200, "jsonResponse.toString()");
     }
 
     private void handlePost(HttpExchange exchange) throws IOException {
