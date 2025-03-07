@@ -155,15 +155,18 @@ class User {
     private String username;
     private String email;
     private String password;
+    private Map<Integer, Integer> purchasedProducts; // Key: productId, Value: quantity
 
     public User(int id, String username, String email, String password) {
         this.id = id;
         this.username = username;
         this.email = email;
         this.password = password;
+        this.purchasedProducts = new HashMap<>(); // added this to initialize the map --> saw current impl. led to an error.
     }
 
     // Getters and setters remain the same
+
     public int getId() { return id; }
     public String getUsername() { return username; }
     public String getEmail() { return email; }
@@ -171,6 +174,13 @@ class User {
     public void setEmail(String email) { this.email = email; }
     public void setUsername(String username) { this.username = username; }
     public void setPassword(String password) { this.password = password; }
+    public void addPurchase(int productId, int quantity) {
+        purchasedProducts.merge(productId, quantity, Integer::sum);
+    }
+
+    public Map<Integer, Integer> getPurchasedProducts() {
+        return purchasedProducts;
+    }
 
     private String hashPassword(String password) {
         try {
@@ -358,18 +368,69 @@ class UserManager {
 
 class UserHandler implements HttpHandler {
     private static UserManager userManager = new UserManager();
+    
 
     @Override
     public void handle(HttpExchange exchange) throws IOException {
         String method = exchange.getRequestMethod();
+        String path = exchange.getRequestURI().getPath();
 
-        if ("POST".equalsIgnoreCase(method)) {
+        if ("POST".equalsIgnoreCase(method) && path.matches("/user/\\d+/purchase")) {
+            handleAddPurchase(exchange);
+        } else if ("GET".equalsIgnoreCase(method) && path.matches("/user/purchased/\\d+")) {
+            handleGetPurchased(exchange);
+        } else if ("POST".equalsIgnoreCase(method)) {
             handlePost(exchange);
         } else if ("GET".equalsIgnoreCase(method)) {
             handleGet(exchange);
         } else {
             sendErrorResponse(exchange, 400, "");
         }
+    }
+
+    private void handleAddPurchase(HttpExchange exchange) throws IOException {
+        String path = exchange.getRequestURI().getPath();
+        int userId = Integer.parseInt(path.split("/")[2]);
+
+        String requestBody = new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8);
+        Map<String, String> requestData = parseJsonToMap(requestBody);
+
+        int productId = Integer.parseInt(requestData.get("product_id"));
+        int quantity = Integer.parseInt((requestData.get("quantity")));
+
+        User user = userManager.getUser(userId);
+        if (user == null) {
+            sendErrorResponse(exchange, 404, "User not found");
+            return;
+        }
+
+        user.addPurchase(productId, quantity);
+        sendResponse(exchange, 200, "{\"status\":\"Purchase added\"}");
+    }
+
+    private void handleGetPurchased(HttpExchange exchange) throws IOException {
+        String path = exchange.getRequestURI().getPath();
+        int userId = Integer.parseInt(path.split("/")[3]);
+        User user = userManager.getUser(userId);
+        if (user == null) {
+            sendErrorResponse(exchange, 404, "");
+            return;
+        }
+
+        Map<Integer, Integer> purchasedProducts = user.getPurchasedProducts();
+        StringBuilder jsonResponse = new StringBuilder("{");
+        boolean first = true;
+        for (Map.Entry<Integer, Integer> entry : purchasedProducts.entrySet()) {
+            if (!first) {
+                jsonResponse.append(",");
+            }
+            jsonResponse.append(String.format("\"%d\":%d", entry.getKey(), entry.getValue()));
+            first = false;
+        }
+        jsonResponse.append("}");
+
+        sendResponse(exchange, 200, jsonResponse.toString());
+        // sendResponse(exchange, 200, "jsonResponse.toString()");
     }
 
     private void handlePost(HttpExchange exchange) throws IOException {
@@ -381,19 +442,11 @@ class UserHandler implements HttpHandler {
             sendErrorResponse(exchange, 400, "");
             return;
         }
-
         switch (command) {
-            case "create":
-                handleCreateUser(exchange, requestData);
-                break;
-            case "update":
-                handleUpdateUser(exchange, requestData);
-                break;
-            case "delete":
-                handleDeleteUser(exchange, requestData);
-                break;
-            default:
-                sendErrorResponse(exchange, 400, "");
+            case "create" -> handleCreateUser(exchange, requestData);
+            case "update" -> handleUpdateUser(exchange, requestData);
+            case "delete" -> handleDeleteUser(exchange, requestData);
+            default -> sendErrorResponse(exchange, 400, "");
         }
     }
 
@@ -414,10 +467,10 @@ class UserHandler implements HttpHandler {
                 // Pass null as command to exclude it from the response
                 sendResponse(exchange, 200, user.toResponseString(null));
             } else {
-                sendErrorResponse(exchange, 404, "");
+                sendErrorResponse(exchange, 404, "User not found");
             }   
         } catch (NumberFormatException e) {
-            sendErrorResponse(exchange, 400, "");
+            sendErrorResponse(exchange, 400, "Invalid user ID");
         }
     }
 
@@ -521,6 +574,7 @@ class UserHandler implements HttpHandler {
     }
 
     private void sendResponse(HttpExchange exchange, int statusCode, String response) throws IOException {
+        exchange.getResponseHeaders().set("Content-Type", "application/json");
         byte[] responseBytes = response.getBytes(StandardCharsets.UTF_8);
         exchange.sendResponseHeaders(statusCode, responseBytes.length);
         try (OutputStream os = exchange.getResponseBody()) {
