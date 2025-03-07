@@ -7,6 +7,12 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.util.*;
+import java.sql.Connection;
+import java.sql.DriverManager;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.sql.Statement;
 
 public class ProductService {
     private static int PORT;
@@ -91,10 +97,19 @@ public class ProductService {
     }
 
     public static void main(String[] args) throws IOException {
-        loadConfig(null);
+        loadConfig(args.length > 0 ? args[0] : null);
+        System.out.println("PORT: " + PORT);
         HttpServer server = HttpServer.create(new InetSocketAddress(PORT), 0);
+
+        // Use IP from config, defaulting to 0.0.0.0 if not set
+        String bindAddress = (IP != null && !IP.isEmpty()) ? IP : "0.0.0.0";
+        
+        // Ensure PORT is valid
+        if (PORT <= 0) {
+            PORT = 15000; // Default port
+        }
         server.createContext("/product", new ProductHandler());
-        server.setExecutor(null);
+        server.setExecutor(java.util.concurrent.Executors.newFixedThreadPool(10));
         server.start();
 
         System.out.println("ProductService started on port " + PORT);
@@ -142,63 +157,168 @@ class Product {
     }
 }
 
+class DatabaseManager {
+    private static final String DB_URL = "jdbc:sqlite:products.db";
+    private static boolean initialized = false;
+    
+    static {
+        try {
+            Class.forName("org.sqlite.JDBC");
+            System.out.println("SQLite JDBC driver loaded successfully");
+        } catch (ClassNotFoundException e) {
+            System.err.println("Error loading SQLite driver: " + e.getMessage());
+        }
+    }
+
+    public static Connection getConnection() throws SQLException {
+        // Initialize database on first connection
+        if (!initialized) {
+            initialized = true;
+            initializeDatabase();
+        }
+        return DriverManager.getConnection(DB_URL);
+    }
+    
+    private static void initializeDatabase() {
+        try (Connection conn = DriverManager.getConnection(DB_URL);
+             Statement stmt = conn.createStatement()) {
+            
+            stmt.execute("CREATE TABLE IF NOT EXISTS products (" +
+                         "id INTEGER PRIMARY KEY, " +
+                         "name TEXT NOT NULL, " +
+                         "description TEXT NOT NULL, " +
+                         "price REAL NOT NULL, " +
+                         "quantity INT NOT NULL)");
+            System.out.println("Database initialized successfully");
+
+        } catch (SQLException e) {
+            System.err.println("Error initializing database: " + e.getMessage());
+        }
+    }
+}
+
 class ProductManager {
     private Map<Integer, Product> products;
 
     public ProductManager() {
-        this.products = new HashMap<>();
+        try {
+            DatabaseManager.getConnection().close();
+        } catch (SQLException e) {
+            System.err.println("Error initializing product manager: " + e.getMessage());
+        }
     }
 
     public Product addProduct(Product product) {
+        System.out.println("REACHED addProduct");
         if (product.getName() == null || product.getName().trim().isEmpty()) {
+            System.out.println("RETURN NULL");
             return null;
         }
-
-        if (products.containsKey(product.getId())) {
+        System.out.println("SECOND IF");
+        if (getProduct(product.getId()) != null) {
+            System.out.println("RETURN NULL");
             return null;
         }
+        System.out.println("BEFORE TRY");
+        try (Connection conn = DatabaseManager.getConnection();
+            PreparedStatement stmt = conn.prepareStatement(
+                "INSERT INTO products (id, name, description, price, quantity) VALUES (?, ?, ?, ?, ?)")) {
+            System.out.println("INSIDE TRY");
+            stmt.setInt(1, product.getId());
+            stmt.setString(2, product.getName());
+            stmt.setString(3, product.getDescription());
+            stmt.setDouble(4, product.getPrice());
+            stmt.setInt(5, product.getQuantity());
 
-        products.put(product.getId(), product);
-        return product;
+            int rowsAffected = stmt.executeUpdate();
+            if (rowsAffected > 0) {
+                System.out.println("ROWS AFFECTED: " + rowsAffected);
+                return product;
+            }
+            System.out.println("BOTTOM NULL RETURN");
+            return null;
+        } catch (SQLException e) {
+            System.err.println("Error adding product: " + e.getMessage());
+            return null;
+        }
     }
 
     public Product updateProduct(int id, String name, String description, Double price, Integer quantity) {
-        Product existingProduct = products.get(id);
+        System.out.println("IN UPDATE PRODUCT");
+        Product existingProduct = getProduct(id);
+
         if (existingProduct == null || id <= 0) {
             return null;
         }
-
-        Product updatedProduct = new Product(
-            id, 
-            name != null ? name : existingProduct.getName(),
-            description != null ? description : existingProduct.getDescription(),
-            price != null ? price : existingProduct.getPrice(),
-            quantity != null ? quantity : existingProduct.getQuantity()
-        );
-        products.put(id, updatedProduct);
-        return updatedProduct;
+        System.out.println("BEFORE TRY");
+        try (Connection conn = DatabaseManager.getConnection();
+             PreparedStatement stmt = conn.prepareStatement(
+                 "UPDATE products SET name = ?, description = ?, price = ?, quantity = ? WHERE id = ?")) {
+                 
+            stmt.setString(1, name != null ? name : existingProduct.getName());
+            stmt.setString(2, description != null ? description : existingProduct.getDescription());
+            stmt.setDouble(3, price != null ? price : existingProduct.getPrice());
+            stmt.setInt(4, quantity != null ? quantity : existingProduct.getQuantity());
+            stmt.setInt(5, id);
+        
+            int rowsAffected = stmt.executeUpdate();
+            if (rowsAffected > 0) {
+                return getProduct(id);
+            }
+            return null;
+        } catch (SQLException e) {
+            System.err.println("Error updating product: " + e.getMessage());
+            return null;
+        }
     }
 
     public boolean deleteProduct(int id, String name, Double price, Integer quantity) {
-        Product product = products.get(id);
+        Product product = getProduct(id);
         if (product != null) {
-            // boolean matches = (name == null || name.equals(product.getName())) &&
-            //                   (price == null || price.equals(product.getPrice())) &&
-            //                   (quantity == null || quantity.equals(product.getQuantity()));
             boolean matches = (name.equals(product.getName())) &&
                               (price.equals(product.getPrice())) &&
                               (quantity.equals(product.getQuantity()));
-            // return true;
             if (matches) {
-                products.remove(id);
-                return true;
+                try (Connection conn = DatabaseManager.getConnection();
+                    PreparedStatement stmt = conn.prepareStatement(
+                        "DELETE FROM product WHERE id = ?")) {
+                        
+                    stmt.setInt(1, id);
+                    
+                    int rowsAffected = stmt.executeUpdate();
+                    return rowsAffected > 0;
+                } catch (SQLException e) {
+                    System.err.println("Error deleting product: " + e.getMessage());
+                    return false;
+                }
             }
         }
         return false;
     }
 
     public Product getProduct(int id) {
-        return products.get(id);
+        try (Connection conn = DatabaseManager.getConnection();
+             PreparedStatement stmt = conn.prepareStatement(
+                 "SELECT * FROM products WHERE id = ?")) {
+                 
+            stmt.setInt(1, id);
+            
+            try (ResultSet rs = stmt.executeQuery()) {
+                if (rs.next()) {
+                    return new Product(
+                        rs.getInt("id"),
+                        rs.getString("name"),
+                        rs.getString("description"),
+                        rs.getDouble("price"),
+                        rs.getInt("quantity")
+                    );
+                }
+                return null;
+            }
+        } catch (SQLException e) {
+            System.err.println("Error retrieving product: " + e.getMessage());
+            return null;
+        }
     }
 }
 

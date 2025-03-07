@@ -24,6 +24,14 @@ start_order_service() {
     python3 "$COMPILED_DIR/OrderServiceTest.py"
 }
 
+test_product_service() {
+    $ROOT_DIR/runme.sh -c
+    # $ROOT_DIR/runtest.sh -restart
+    $ROOT_DIR/runme.sh -p &
+    python3 parser.py simple_test_product.txt
+    $ROOT_DIR/runtest.sh -end
+}
+
 # Argument handling
 case "$1" in
     -start)
@@ -46,6 +54,9 @@ case "$1" in
         ;;
     -o)
         start_order_service
+        ;;
+    -t)
+        test_product_service
         ;;
     *)
         echo "Usage: ./runtest.sh -u | -p | -o"
