@@ -17,7 +17,7 @@ import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.HashMap;
 import java.util.Map;
-
+import java.util.regex.*;
 
 public class UserService {
     // private static final int PORT = 14001;
@@ -239,13 +239,13 @@ class User {
             // For GET requests, exclude command field
             return String.format(
                 "{\"id\":%d,\"username\":\"%s\",\"email\":\"%s\",\"password\":\"%s\"}",
-                id, username, email, hashPassword(password)
+                id, username, email, hashPassword(password).toUpperCase()
             );
         } else {
             // For CREATE and UPDATE requests, include command field
             return String.format(
                 "{\"id\":%d,\"username\":\"%s\",\"email\":\"%s\",\"password\":\"%s\",\"command\":\"%s\"}",
-                id, username, email, hashPassword(password), command
+                id, username, email, hashPassword(password).toUpperCase(), command
             );
         }
     }
@@ -340,10 +340,14 @@ class UserManager {
         if (existingUser == null || id <= 0) {
             return null;
         }
+        if (email.trim().isEmpty()|| password.trim().isEmpty()) {
+            return null;
+        }
 
         try (Connection conn = DatabaseManager.getConnection();
              PreparedStatement stmt = conn.prepareStatement(
                  "UPDATE users SET username = ?, email = ?, password = ? WHERE id = ?")) {
+                 
                  
             stmt.setString(1, username != null ? username : existingUser.getUsername());
             stmt.setString(2, email != null ? email : existingUser.getEmail());
@@ -522,8 +526,13 @@ class UserHandler implements HttpHandler {
             String username = requestData.get("username");
             String email = requestData.get("email");
             String password = requestData.get("password");
+            String regexPattern = "^(?=.{1,64}@)[A-Za-z0-9_-]+(\\.[A-Za-z0-9_-]+)*@" 
+        + "[^-][A-Za-z0-9-]+(\\.[A-Za-z0-9-]+)*(\\.[A-Za-z]{2,})$";
+            boolean valid_email = Pattern.compile(regexPattern).matcher(email).matches();
 
-            if (username == null || email == null || password == null) {
+            
+            
+            if (username == null || email == null || !valid_email || password == null) {
                 sendErrorResponse(exchange, 400, "");
                 return;
             }
