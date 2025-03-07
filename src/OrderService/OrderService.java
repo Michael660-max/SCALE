@@ -230,6 +230,7 @@ public class OrderService {
                 } catch (SQLException e) {
                     System.err.println("Error wiping products database: " + e.getMessage());
                 }
+                shutdownFlag.delete();
             } catch (Exception e) {
                 System.err.println("Error during database wiping: " + e.getMessage());
             }
