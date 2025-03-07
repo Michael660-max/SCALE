@@ -149,7 +149,7 @@ def handle_order_action(action, params):
 def print_response(action, response):
     print(f"{action} RESPONSE: {response.status_code}")
     if response.status_code == 200:
-        if response.headers.get('Content-Type') == 'application/json':
+        if (response.headers.get('Content-Type') == 'application/json' and response.text):
             print(response.json())
         else:
             print(response.text)
