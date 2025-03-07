@@ -143,6 +143,8 @@ public class UserService {
         
         HttpServer server = HttpServer.create(new InetSocketAddress(bindAddress, PORT), 0);
         server.createContext("/user", new UserHandler());
+        server.createContext("/shutdown", new ShutdownHandler(server));
+        server.createContext("/restart", new RestartHandler());    
         server.setExecutor(java.util.concurrent.Executors.newFixedThreadPool(10));
         server.start();
         
@@ -248,6 +250,8 @@ class DatabaseManager {
             System.err.println("Error initializing database: " + e.getMessage());
         }
     }
+
+
 }
 
 class UserManager {

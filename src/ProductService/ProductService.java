@@ -108,10 +108,47 @@ public class ProductService {
             PORT = 15000; // Default port
         }
         server.createContext("/product", new ProductHandler());
+        server.createContext("/shutdown", new ShutdownHandler(server));
+        server.createContext("/restart", new RestartHandler());
         server.setExecutor(java.util.concurrent.Executors.newFixedThreadPool(10));
         server.start();
 
         System.out.println("ProductService started on port " + PORT);
+    }
+
+    static class ShutdownHandler implements HttpHandler {
+        private final HttpServer server;
+        
+        public ShutdownHandler(HttpServer server) {
+            this.server = server;
+        }
+        
+        @Override
+        public void handle(HttpExchange exchange) throws IOException {
+            String response = "{\"status\":\"shutting_down\"}";
+            exchange.getResponseHeaders().add("Content-Type", "application/json");
+            exchange.sendResponseHeaders(200, response.length());
+            OutputStream os = exchange.getResponseBody();
+            os.write(response.getBytes());
+            os.close();
+            
+            System.out.println("Shutdown command received, shutting down ProductService");
+            server.stop(0);
+        }
+    }
+    
+    static class RestartHandler implements HttpHandler {
+        @Override
+        public void handle(HttpExchange exchange) throws IOException {
+            String response = "{\"status\":\"restart_received\"}";
+            exchange.getResponseHeaders().add("Content-Type", "application/json");
+            exchange.sendResponseHeaders(200, response.length());
+            OutputStream os = exchange.getResponseBody();
+            os.write(response.getBytes());
+            os.close();
+            
+            System.out.println("Restart command received by ProductService");
+        }
     }
 }
 
@@ -159,7 +196,7 @@ class Product {
 class DatabaseManager {
     private static final String DB_URL = "jdbc:sqlite:products.db";
     private static boolean initialized = false;
-    
+
     static {
         try {
             Class.forName("org.sqlite.JDBC");
@@ -273,7 +310,7 @@ class ProductManager {
             if (matches) {
                 try (Connection conn = DatabaseManager.getConnection();
                     PreparedStatement stmt = conn.prepareStatement(
-                        "DELETE FROM product WHERE id = ?")) {
+                        "DELETE FROM products WHERE id = ?")) {
                         
                     stmt.setInt(1, id);
                     

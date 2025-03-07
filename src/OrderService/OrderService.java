@@ -10,8 +10,6 @@ import java.net.URL;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Paths;
-import java.util.*;
-import java.util.concurrent.ConcurrentHashMap;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
@@ -20,6 +18,7 @@ import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
 public class OrderService {
     private static int PORT;
@@ -138,11 +137,106 @@ public class OrderService {
         server.createContext("/product", new ProductHandler());
         server.createContext("/user", new UserHandler());
         server.createContext("/order", new OrderHandler());
-        server.setExecutor(java.util.concurrent.Executors.newFixedThreadPool(10));
+        server.createContext("/shutdown", new ShutdownHandler(server));
+        server.createContext("/restart", new RestartHandler());    
+        server.setExecutor(null);
         server.start();
         System.out.println("OrderService started on port " + PORT);
     }
-}
+
+    static class ShutdownHandler implements HttpHandler {
+        private final HttpServer server;
+        
+        public ShutdownHandler(HttpServer server) {
+            this.server = server;
+        }
+
+        @Override
+        public void handle(HttpExchange exchange) throws IOException {
+            String response = "{\"status\":\"shutting_down\"}";
+            exchange.getResponseHeaders().add("Content-Type", "application/json");
+            exchange.sendResponseHeaders(200, response.length());
+            OutputStream os = exchange.getResponseBody();
+            os.write(response.getBytes());
+            os.close();
+            
+            // SQLite automatically persists data, no need for special handling
+            System.out.println("Shutdown command received, shutting down OrderService");
+            server.stop(0);
+        }
+    
+    }
+
+    static class RestartHandler implements HttpHandler {
+        private static final String FLAG_FILE = "restart_flag.txt";
+
+        @Override
+        public void handle(HttpExchange exchange) throws IOException {
+            try {
+                // Create a flag file to indicate restart was the first command
+                new File(FLAG_FILE).createNewFile();
+                System.out.println("Restart command received - data will be preserved");
+                
+                String response = "{\"status\":\"restart_received\"}";
+                exchange.getResponseHeaders().add("Content-Type", "application/json");
+                exchange.sendResponseHeaders(200, response.length());
+                OutputStream os = exchange.getResponseBody();
+                os.write(response.getBytes());
+                os.close();
+            } catch (IOException e) {
+                String errorResponse = "{\"error\":\"" + e.getMessage() + "\"}";
+                exchange.sendResponseHeaders(500, errorResponse.length());
+                OutputStream os = exchange.getResponseBody();
+                os.write(errorResponse.getBytes());
+                os.close();
+            }
+        
+        }
+    }
+
+    static {
+        // Check if restart was the first command after startup
+        File restartFlag = new File("restart_flag.txt");
+        if (!restartFlag.exists()) {
+            // No restart flag, so wipe all databases
+            System.out.println("No restart flag detected - wiping all databases");
+            
+            try {
+                // Wipe OrderService database
+                try (Connection conn = DriverManager.getConnection("jdbc:sqlite:orders.db");
+                     Statement stmt = conn.createStatement()) {
+                    stmt.execute("DELETE FROM orders");
+                    System.out.println("Orders database wiped");
+                } catch (SQLException e) {
+                    System.err.println("Error wiping orders database: " + e.getMessage());
+                }
+                
+                // Wipe UserService database
+                try (Connection conn = DriverManager.getConnection("jdbc:sqlite:users.db");
+                     Statement stmt = conn.createStatement()) {
+                    stmt.execute("DELETE FROM users");
+                    System.out.println("Users database wiped");
+                } catch (SQLException e) {
+                    System.err.println("Error wiping users database: " + e.getMessage());
+                }
+                
+                // Wipe ProductService database
+                try (Connection conn = DriverManager.getConnection("jdbc:sqlite:products.db");
+                     Statement stmt = conn.createStatement()) {
+                    stmt.execute("DELETE FROM products");
+                    System.out.println("Products database wiped");
+                } catch (SQLException e) {
+                    System.err.println("Error wiping products database: " + e.getMessage());
+                }
+            } catch (Exception e) {
+                System.err.println("Error during database wiping: " + e.getMessage());
+            }
+        } else {
+            System.out.println("Restart flag detected - keeping existing data in all databases");
+            // Delete the flag file after processing
+            restartFlag.delete();
+        }
+    }}
 
 
 class UserHandler implements HttpHandler {

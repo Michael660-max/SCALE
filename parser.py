@@ -39,6 +39,15 @@ def parse_workload(file_path):
                 continue
             
             parts = line.split()
+
+            if len(parts) == 1 and parts[0].lower() == "shutdown":
+                handle_shutdown()
+                continue
+                
+            if len(parts) == 1 and parts[0].lower() == "restart":
+                handle_restart()
+                continue
+
             service = parts[0].upper()
             action = parts[1].lower()
 
@@ -50,6 +59,37 @@ def parse_workload(file_path):
                 handle_order_action(action, parts[2:])
             else:
                 print(f"Unknown service type: {service}")
+
+def handle_shutdown():
+    print("Sending shutdown command to all services...")
+    try:
+        requests.post(ORDER_SERVICE_URL + "/shutdown", json={"command": "shutdown"})
+        print("OrderService shutdown command sent")
+    except Exception as e:
+        print(f"Error shutting down OrderService: {e}")
+        
+    try:
+        requests.post(USER_SERVICE_URL + "/shutdown", json={"command": "shutdown"})
+        print("UserService shutdown command sent")
+    except Exception as e:
+        print(f"Error shutting down UserService: {e}")
+        
+    try:
+        requests.post(PRODUCT_SERVICE_URL + "/shutdown", json={"command": "shutdown"})
+        print("ProductService shutdown command sent")
+    except Exception as e:
+        print(f"Error shutting down ProductService: {e}")
+
+    
+    print("All shutdown commands sent")
+
+def handle_restart():
+    print("Sending restart command to OrderService...")
+    try:
+        response = requests.post(ORDER_SERVICE_URL + "/restart", json={"command": "restart"})
+        print(f"OrderService restart response: {response.status_code}")
+    except Exception as e:
+        print(f"Error restarting OrderService: {e}")
 
 def handle_user_action(action, params):
     if action == "create":
