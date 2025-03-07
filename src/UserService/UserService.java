@@ -267,7 +267,7 @@ class UserHandler implements HttpHandler {
 
         if ("POST".equalsIgnoreCase(method) && path.matches("/user/\\d+/purchase")) {
             handleAddPurchase(exchange);
-        } else if ("GET".equalsIgnoreCase(method) && path.matches("/user/purchased")) {
+        } else if ("GET".equalsIgnoreCase(method) && path.matches("/user/purchased/\\d+")) {
             handleGetPurchased(exchange);
         } else if ("POST".equalsIgnoreCase(method)) {
             handlePost(exchange);
@@ -300,14 +300,7 @@ class UserHandler implements HttpHandler {
 
     private void handleGetPurchased(HttpExchange exchange) throws IOException {
         String path = exchange.getRequestURI().getPath();
-        // int userId = Integer.parseInt(path.split("/")[2]);
-        String[] pathParts = path.split("/");
-        if (pathParts.length < 3) {
-            sendErrorResponse(exchange, 400, "Invalid path");
-            return;
-        }
-        int userId = Integer.parseInt(pathParts[2]);
-
+        int userId = Integer.parseInt(path.split("/")[3]);
         User user = userManager.getUser(userId);
         if (user == null) {
             sendErrorResponse(exchange, 404, "User not found");
