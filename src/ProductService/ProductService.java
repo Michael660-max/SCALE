@@ -6,13 +6,13 @@ import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Paths;
-import java.util.*;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
+import java.util.*;
 
 public class ProductService {
     private static int PORT;
@@ -426,6 +426,12 @@ class ProductHandler implements HttpHandler {
             String description = requestData.get("description");
             Double price = requestData.containsKey("price") ? Double.parseDouble(requestData.get("price")) : null;
             Integer quantity = requestData.containsKey("quantity") ? Integer.parseInt(requestData.get("quantity")) : null;
+            
+            if (name == null || price < 0 || quantity < 0 || description == null) {
+                sendErrorResponse(exchange, 400, "");
+                return;
+            }
+
 
             Product updatedProduct = productManager.updateProduct(id, name, description, price, quantity);
             if (updatedProduct == null) {
