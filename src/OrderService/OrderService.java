@@ -20,6 +20,8 @@ public class OrderService {
     static String PRODUCT_SERVER_IP;
     static String USER_SERVER_PORT;
     static String USER_SERVER_IP;
+    public static Map<Integer, Map<String, Object>> userCache = new ConcurrentHashMap<>();
+
 
     private static void loadConfig(String path) {
         try {
@@ -131,32 +133,344 @@ public class OrderService {
     }
 }
 class UserHandler implements HttpHandler {
+    // private UserManager userManager = new UserManager();
+
+
     @Override
     public void handle(HttpExchange exchange) throws IOException {
-        String method = exchange.getRequestMethod();
-        
-        // Forward the request to the User Server
-        String userServerUrl = String.format("http://%s:%s%s", 
-            OrderService.USER_SERVER_IP, 
-            OrderService.USER_SERVER_PORT, 
-            exchange.getRequestURI().getPath());
+            String method = exchange.getRequestMethod();
+            String path = exchange.getRequestURI().getPath();
 
-        // System.out.println(userServerUrl);
-        
-        if ("POST".equalsIgnoreCase(method) || "GET".equalsIgnoreCase(method)) {
-            try {
-                forwardRequest(exchange, userServerUrl);
-            } catch (IOException | URISyntaxException e) {
-                e.printStackTrace();
-            }
-        } else {
-            String errorMessage = "Method not supported";
-            exchange.sendResponseHeaders(405, errorMessage.length());
-            try (OutputStream os = exchange.getResponseBody()) {
-                os.write(errorMessage.getBytes(StandardCharsets.UTF_8));
+            if ("POST".equalsIgnoreCase(method) && path.matches("/user/\\d+/purchase")) {
+                handleAddPurchase(exchange);
+            } else if ("GET".equalsIgnoreCase(method) && path.matches("/user/purchased/\\d+")) {
+                handleGetPurchased(exchange);
+            } else if ("POST".equalsIgnoreCase(method)) {
+                handlePost(exchange);
+            } else if ("GET".equalsIgnoreCase(method)) {
+                handleGet(exchange);
+            } else {
+                sendErrorResponse(exchange, 400, "");
             }
         }
-    }
+    
+    private void handlePost(HttpExchange exchange) throws IOException {
+            String requestBody = getRequestBody(exchange);
+            Map<String, String> requestData = parseJsonToMap(requestBody);
+            String command = requestData.get("command");
+
+            if (command == null) {
+                sendErrorResponse(exchange, 400, "");
+                return;
+            }
+            switch (command) {
+                case "create" -> handleCreateUser(exchange, requestData);
+                case "update" -> handleUpdateUser(exchange, requestData);
+                case "delete" -> handleDeleteUser(exchange, requestData);
+                default -> sendErrorResponse(exchange, 400, "");
+            }
+        }
+
+        private void handleCreateUser(HttpExchange exchange, Map<String, String> requestData) throws IOException {
+            try {
+                int id = Integer.parseInt(requestData.get("id"));
+                String username = requestData.get("username");
+                String email = requestData.get("email");
+                String password = requestData.get("password");
+
+                if (username == null || email == null  || password == null) {
+                    sendErrorResponse(exchange, 400, "");
+                    return;
+                }
+
+                // Create the user (User is defined in another module)
+                User user = new User(id, username, email, password);
+                if (userManager.getUser(id) != null) {
+                    sendErrorResponse(exchange, 400, "");
+                    return;
+                }
+                
+                User createdUser = userManager.addUser(user);
+                if (createdUser == null) {
+                    sendErrorResponse(exchange, 400, "");
+                    return;
+                }
+                
+                // Convert the returned user to a generic map
+                Map<String, Object> userData = convertUserToMap(createdUser);
+                OrderService.userCache.put((Integer) userData.get("id"), userData);
+
+                sendResponse(exchange, 200, createdUser.toResponseString(null));
+            } catch (NumberFormatException e) {
+                sendErrorResponse(exchange, 400, "");
+            }
+        }
+
+        private void handleUpdateUser(HttpExchange exchange, Map<String, String> requestData) throws IOException {
+            try {
+                int id = Integer.parseInt(requestData.get("id"));
+                String username = requestData.get("username");
+                String email = requestData.get("email");
+                String password = requestData.get("password");
+
+                User updatedUser = userManager.updateUser(id, username, email, password);
+                if (updatedUser == null) {
+                    sendErrorResponse(exchange, 404, "");
+                    return;
+                }
+                
+                // Convert to a generic map and update the cache
+                Map<String, Object> userData = convertUserToMap(updatedUser);
+                OrderService.userCache.put((Integer) userData.get("id"), userData);
+
+                sendResponse(exchange, 200, updatedUser.toResponseString(null));
+            } catch (NumberFormatException e) {
+                sendErrorResponse(exchange, 400, "");
+            }
+        }
+    
+    private void handleDeleteUser(com.sun.net.httpserver.HttpExchange exchange, Map<String, String> requestData) throws IOException {
+            try {
+                int id = Integer.parseInt(requestData.get("id"));
+                String username = requestData.get("username");
+                String email = requestData.get("email");
+                String password = requestData.get("password");
+
+                if (username == null || email == null || password == null) {
+                    sendErrorResponse(exchange, 400, "Missing data");
+                    return;
+                }
+
+                if (!userManager.deleteUser(id, username, email, password)) {
+                    sendErrorResponse(exchange, 404, "User not found or deletion failed");
+                    return;
+                }
+                // Remove from cache as well
+                userCache.remove(id);
+                sendResponse(exchange, 200, "{\"status\":\"User deleted\"}");
+            } catch (NumberFormatException e) {
+                sendErrorResponse(exchange, 400, "Invalid numeric value");
+            }
+        }
+
+        private void handleAddPurchase(com.sun.net.httpserver.HttpExchange exchange) throws IOException {
+            String path = exchange.getRequestURI().getPath();
+            // Expected format: /user/{id}/purchase
+            String[] segments = path.split("/");
+            if (segments.length < 3) {
+                sendErrorResponse(exchange, 400, "Invalid URL");
+                return;
+            }
+            int userId;
+            try {
+                userId = Integer.parseInt(segments[2]);
+            } catch (NumberFormatException e) {
+                sendErrorResponse(exchange, 400, "Invalid user id");
+                return;
+            }
+            String requestBody = new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8);
+            Map<String, String> requestData = parseJsonToMap(requestBody);
+            int productId, quantity;
+            try {
+                productId = Integer.parseInt(requestData.get("product_id"));
+                quantity = Integer.parseInt(requestData.get("quantity"));
+            } catch (NumberFormatException e) {
+                sendErrorResponse(exchange, 400, "Invalid product id or quantity");
+                return;
+            }
+            // Retrieve the user from UserManager
+            User user = userManager.getUser(userId);
+            if (user == null) {
+                sendErrorResponse(exchange, 404, "User not found");
+                return;
+            }
+            // Update purchase history using the User method
+            user.addPurchase(productId, quantity);
+            // Update the cache with the new user state
+            Map<String, Object> userData = convertUserToMap(user);
+            userCache.put(userId, userData);
+
+            sendResponse(exchange, 200, "{\"status\":\"Purchase added\"}");
+        }
+
+        // Implements the GET endpoint: /user/{id}
+        private void handleGet(com.sun.net.httpserver.HttpExchange exchange) throws IOException {
+            String path = exchange.getRequestURI().getPath();
+            String[] segments = path.split("/");
+            if (segments.length != 3) {
+                sendErrorResponse(exchange, 400, "Invalid URL");
+                return;
+            }
+            int userId;
+            try {
+                userId = Integer.parseInt(segments[2]);
+            } catch (NumberFormatException e) {
+                sendErrorResponse(exchange, 400, "Invalid user id");
+                return;
+            }
+            // Try to retrieve user from the cache first
+            Map<String, Object> cachedUser = userCache.get(userId);
+            if (cachedUser != null) {
+                sendResponse(exchange, 200, mapToJson(cachedUser));
+                return;
+            }
+            // Fallback: retrieve from UserManager and update cache
+            User user = userManager.getUser(userId);
+            if (user != null) {
+                Map<String, Object> userData = convertUserToMap(user);
+                userCache.put(userId, userData);
+                sendResponse(exchange, 200, user.toResponseString(null));
+            } else {
+                sendErrorResponse(exchange, 404, "User not found");
+            }
+        }
+
+        // Implements the GET endpoint for purchased products: /user/purchased/{id}
+        private void handleGetPurchased(com.sun.net.httpserver.HttpExchange exchange) throws IOException {
+            String path = exchange.getRequestURI().getPath();
+            // Expected format: /user/purchased/{id}
+            String[] segments = path.split("/");
+            if (segments.length < 4) {
+                sendErrorResponse(exchange, 400, "Invalid URL");
+                return;
+            }
+            int userId;
+            try {
+                userId = Integer.parseInt(segments[3]);
+            } catch (NumberFormatException e) {
+                sendErrorResponse(exchange, 400, "Invalid user id");
+                return;
+            }
+            // Check cache first
+            Map<String, Object> cachedUser = userCache.get(userId);
+            if (cachedUser != null && cachedUser.containsKey("purchasedProducts")) {
+                Object purchased = cachedUser.get("purchasedProducts");
+                // Assume purchased is a Map; convert it to JSON.
+                if (purchased instanceof Map) {
+                    @SuppressWarnings("unchecked")
+                    Map<String, Object> purchasedMap = (Map<String, Object>) ((Map<?, ?>) purchased);
+                    sendResponse(exchange, 200, mapToJson(purchasedMap));
+                    return;
+                }
+            }
+            // Otherwise, retrieve user from UserManager
+            User user = userManager.getUser(userId);
+            if (user == null) {
+                sendErrorResponse(exchange, 404, "User not found");
+                return;
+            }
+            // Update the cache with fresh data
+            Map<String, Object> userData = convertUserToMap(user);
+            userCache.put(userId, userData);
+            // Extract purchasedProducts from the user object
+            Map<Integer, Integer> purchasedProducts = user.getPurchasedProducts();
+            // Convert to a simple JSON string
+            StringBuilder jsonResponse = new StringBuilder("{");
+            boolean first = true;
+            for (Map.Entry<Integer, Integer> entry : purchasedProducts.entrySet()) {
+                if (!first) {
+                    jsonResponse.append(",");
+                }
+                jsonResponse.append(String.format("\"%d\":%d", entry.getKey(), entry.getValue()));
+                first = false;
+            }
+            jsonResponse.append("}");
+            sendResponse(exchange, 200, jsonResponse.toString());
+        }
+    
+        private Map<String, Object> convertUserToMap(Object user) {
+            Map<String, Object> map = new HashMap<>();
+            try {
+                Method getId = user.getClass().getMethod("getId");
+                Method getUsername = user.getClass().getMethod("getUsername");
+                Method getEmail = user.getClass().getMethod("getEmail");
+                Method getPassword = user.getClass().getMethod("getPassword");
+                Method getPurchased = null;
+                try {
+                    getPurchased = user.getClass().getMethod("getPurchasedProducts");
+                } catch (NoSuchMethodException nsme) {
+                    // If not available, ignore.
+                }
+                Object id = getId.invoke(user);
+                Object username = getUsername.invoke(user);
+                Object email = getEmail.invoke(user);
+                Object password = getPassword.invoke(user);
+
+                map.put("id", id);
+                map.put("username", username);
+                map.put("email", email);
+                map.put("password", password);
+                if (getPurchased != null) {
+                    Object purchased = getPurchased.invoke(user);
+                    map.put("purchasedProducts", purchased);
+                }
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
+            return map;
+        }
+
+        // Converts a generic Map<String, Object> into a JSON string.
+        private String mapToJson(Map<String, Object> map) {
+            StringBuilder sb = new StringBuilder("{");
+            boolean first = true;
+            for (Map.Entry<String, Object> entry : map.entrySet()) {
+                if (!first) {
+                    sb.append(",");
+                }
+                sb.append("\"").append(entry.getKey()).append("\":");
+                Object value = entry.getValue();
+                if (value instanceof String) {
+                    sb.append("\"").append(value).append("\"");
+                } else if (value instanceof Map) {
+                    @SuppressWarnings("unchecked")
+                    Map<String, Object> subMap = (Map<String, Object>) value;
+                    sb.append(mapToJson(subMap));
+                } else {
+                    sb.append(value);
+                }
+                first = false;
+            }
+            sb.append("}");
+            return sb.toString();
+        }
+
+        private String getRequestBody(com.sun.net.httpserver.HttpExchange exchange) throws IOException {
+            try (BufferedReader reader = new BufferedReader(new InputStreamReader(exchange.getRequestBody(), StandardCharsets.UTF_8))) {
+                StringBuilder sb = new StringBuilder();
+                String line;
+                while ((line = reader.readLine()) != null) {
+                    sb.append(line);
+                }
+                return sb.toString();
+            }
+        }
+
+        private Map<String, String> parseJsonToMap(String json) {
+            Map<String, String> map = new HashMap<>();
+            json = json.replaceAll("[{}\"]", "");
+            String[] pairs = json.split(",");
+            for (String pair : pairs) {
+                String[] keyValue = pair.split(":");
+                if (keyValue.length == 2) {
+                    map.put(keyValue[0].trim(), keyValue[1].trim());
+                }
+            }
+            return map;
+        }
+
+        private void sendResponse(com.sun.net.httpserver.HttpExchange exchange, int statusCode, String response) throws IOException {
+            exchange.getResponseHeaders().set("Content-Type", "application/json");
+            byte[] responseBytes = response.getBytes(StandardCharsets.UTF_8);
+            exchange.sendResponseHeaders(statusCode, responseBytes.length);
+            try (OutputStream os = exchange.getResponseBody()) {
+                os.write(responseBytes);
+            }
+        }
+
+        private void sendErrorResponse(com.sun.net.httpserver.HttpExchange exchange, int statusCode, String errorMessage) throws IOException {
+            sendResponse(exchange, statusCode, errorMessage);
+        }
 
     private void forwardRequest(HttpExchange exchange, String targetUrl) throws IOException, URISyntaxException {
         try {
