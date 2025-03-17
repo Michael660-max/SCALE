@@ -1,7 +1,8 @@
-import com.sun.net.httpserver.HttpExchange;
-import com.sun.net.httpserver.HttpHandler;
-import com.sun.net.httpserver.HttpServer;
-import java.io.*;
+import java.io.BufferedReader;
+import java.io.File;
+import java.io.IOException;
+import java.io.InputStreamReader;
+import java.io.OutputStream;
 import java.math.BigInteger;
 import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
@@ -9,15 +10,21 @@ import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
-import java.sql.Connection;
-import java.sql.DriverManager;
-import java.sql.PreparedStatement;
-import java.sql.ResultSet;
-import java.sql.SQLException;
-import java.sql.Statement;
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
-import java.util.regex.*;
+import java.util.regex.Pattern;
+
+import org.bson.Document;
+
+import com.mongodb.client.MongoClient;
+import com.mongodb.client.MongoClients;
+import com.mongodb.client.MongoCollection;
+import com.mongodb.client.MongoDatabase;
+import com.sun.net.httpserver.HttpExchange;
+import com.sun.net.httpserver.HttpHandler;
+import com.sun.net.httpserver.HttpServer;
 
 public class UserService {
     // private static final int PORT = 14001;
@@ -32,132 +39,131 @@ public class UserService {
             }
             String filePath = new File(path).getAbsolutePath();
             String content = new String(Files.readAllBytes(Paths.get(filePath)), StandardCharsets.UTF_8);
-            // String content = new String(Files.readAllBytes(Paths.get("config.json")), StandardCharsets.UTF_8);
+            // String content = new String(Files.readAllBytes(Paths.get("config.json")),
+            // StandardCharsets.UTF_8);
             Map<String, Map<String, String>> config = parseNestedJson(content);
             Map<String, String> userService = config.get("UserService");
 
             if (userService != null) {
                 String portStr = userService.get("port");
                 String ipStr = userService.get("ip");
-                
+
                 if (portStr != null) {
                     PORT = Integer.parseInt(portStr);
                 }
-                
+
                 if (ipStr != null) {
                     IP = ipStr;
                 }
             }
         } catch (IOException e) {
-            // System.out.println("Warning: Could not read config.json. Using default port " + PORT + " and IP " + IP);
+            // System.out.println("Warning: Could not read config.json. Using default port "
+            // + PORT + " and IP " + IP);
             // System.out.println("hehe");
         } catch (Exception e) {
-            // System.out.println("Warning: Error parsing config.json. Using default port " + PORT + " and IP " + IP);
+            // System.out.println("Warning: Error parsing config.json. Using default port "
+            // + PORT + " and IP " + IP);
             // System.out.println("haha");
         }
     }
 
-    
-
-    /** 
+    /**
      * @param json
      * @return Map<String, Map<String, String>>
      */
     private static Map<String, Map<String, String>> parseNestedJson(String json) {
         Map<String, Map<String, String>> result = new HashMap<>();
-        
+
         // Remove whitespace and newlines
         json = json.trim();
         if (json.startsWith("{") && json.endsWith("}")) {
             json = json.substring(1, json.length() - 1);
         }
-        
+
         // Split top-level JSON keys
         String[] topLevelEntries = json.split("},");
         for (String entry : topLevelEntries) {
             entry = entry.trim();
             if (!entry.endsWith("}")) {
-                entry += "}";  // Fix missing closing brace in split
+                entry += "}"; // Fix missing closing brace in split
             }
-    
+
             // Extract the key
             int colonIndex = entry.indexOf(":");
-            if (colonIndex == -1) continue; // Skip invalid entries
-            
+            if (colonIndex == -1)
+                continue; // Skip invalid entries
+
             String key = entry.substring(0, colonIndex).replaceAll("[\"{}]", "").trim();
             String value = entry.substring(colonIndex + 1).trim();
-            
+
             // Parse the nested object
             Map<String, String> nestedMap = parseInnerObject(value);
             result.put(key, nestedMap);
         }
-        
+
         return result;
     }
-    
 
-    
-    /** 
+    /**
      * @param json
      * @return Map<String, String>
      */
     private static Map<String, String> parseInnerObject(String json) {
         Map<String, String> result = new HashMap<>();
-        
+
         json = json.trim();
         if (json.startsWith("{") && json.endsWith("}")) {
             json = json.substring(1, json.length() - 1);
         }
-        
+
         // Split into key-value pairs safely
         String[] pairs = json.split(",");
         for (String pair : pairs) {
             int colonIndex = pair.indexOf(":");
-            if (colonIndex == -1) continue; // Skip malformed entries
-            
+            if (colonIndex == -1)
+                continue; // Skip malformed entries
+
             String key = pair.substring(0, colonIndex).replaceAll("[\"{}]", "").trim();
             String value = pair.substring(colonIndex + 1).replaceAll("[\"{}]", "").trim();
-            
+
             result.put(key, value);
         }
-        
+
         return result;
     }
-    
 
-    
-    /** 
+    /**
      * @param args
      * @throws IOException
      */
     public static void main(String[] args) throws IOException {
         loadConfig(args.length > 0 ? args[0] : null);
-        
+
         // Use IP from config, defaulting to 0.0.0.0 if not set
         String bindAddress = (IP != null && !IP.isEmpty()) ? IP : "0.0.0.0";
-        
+
         // Ensure PORT is valid
         if (PORT <= 0) {
             PORT = 14001; // Default port
         }
-        
+
         HttpServer server = HttpServer.create(new InetSocketAddress(bindAddress, PORT), 0);
         server.createContext("/user", new UserHandler());
         server.createContext("/shutdown", new ShutdownHandler(server));
         server.createContext("/restart", new RestartHandler());
         server.setExecutor(java.util.concurrent.Executors.newFixedThreadPool(10));
         server.start();
-        
+
         System.out.println("UserService started on " + bindAddress + ":" + PORT);
     }
 
     static class ShutdownHandler implements HttpHandler {
         private final HttpServer server;
-        
+
         public ShutdownHandler(HttpServer server) {
             this.server = server;
         }
-        
+
         @Override
         public void handle(HttpExchange exchange) throws IOException {
             String response = "{\"status\":\"shutting_down\"}";
@@ -166,13 +172,13 @@ public class UserService {
             try (OutputStream os = exchange.getResponseBody()) {
                 os.write(response.getBytes());
             }
-            
+
             // Simple shutdown - SQLite automatically persists data
             System.out.println("Shutdown command received, shutting down UserService");
             server.stop(0);
         }
     }
-    
+
     static class RestartHandler implements HttpHandler {
         @Override
         public void handle(HttpExchange exchange) throws IOException {
@@ -184,7 +190,7 @@ public class UserService {
             try (OutputStream os = exchange.getResponseBody()) {
                 os.write(response.getBytes());
             }
-            
+
             System.out.println("Restart command received by UserService");
         }
     }
@@ -202,18 +208,40 @@ class User {
         this.username = username;
         this.email = email;
         this.password = password;
-        this.purchasedProducts = new HashMap<>(); // added this to initialize the map --> saw current impl. led to an error.
+        this.purchasedProducts = new HashMap<>(); // added this to initialize the map --> saw current impl. led to an
+                                                  // error.
     }
 
     // Getters and setters remain the same
 
-    public int getId() { return id; }
-    public String getUsername() { return username; }
-    public String getEmail() { return email; }
-    public String getPassword() { return password; }
-    public void setEmail(String email) { this.email = email; }
-    public void setUsername(String username) { this.username = username; }
-    public void setPassword(String password) { this.password = password; }
+    public int getId() {
+        return id;
+    }
+
+    public String getUsername() {
+        return username;
+    }
+
+    public String getEmail() {
+        return email;
+    }
+
+    public String getPassword() {
+        return password;
+    }
+
+    public void setEmail(String email) {
+        this.email = email;
+    }
+
+    public void setUsername(String username) {
+        this.username = username;
+    }
+
+    public void setPassword(String password) {
+        this.password = password;
+    }
+
     public void addPurchase(int productId, int quantity) {
         purchasedProducts.merge(productId, quantity, Integer::sum);
     }
@@ -238,67 +266,66 @@ class User {
         if (command == null) {
             // For GET requests, exclude command field
             return String.format(
-                "{\"id\":%d,\"username\":\"%s\",\"email\":\"%s\",\"password\":\"%s\"}",
-                id, username, email, hashPassword(password).toUpperCase()
-            );
+                    "{\"id\":%d,\"username\":\"%s\",\"email\":\"%s\",\"password\":\"%s\"}",
+                    id, username, email, hashPassword(password).toUpperCase());
         } else {
             // For CREATE and UPDATE requests, include command field
             return String.format(
-                "{\"id\":%d,\"username\":\"%s\",\"email\":\"%s\",\"password\":\"%s\",\"command\":\"%s\"}",
-                id, username, email, hashPassword(password).toUpperCase(), command
-            );
+                    "{\"id\":%d,\"username\":\"%s\",\"email\":\"%s\",\"password\":\"%s\",\"command\":\"%s\"}",
+                    id, username, email, hashPassword(password).toUpperCase(), command);
         }
     }
 }
 
 class DatabaseManager {
-    private static final String DB_URL = "jdbc:sqlite:users.db";
-    private static boolean initialized = false;
-    
-    static {
-        try {
-            Class.forName("org.sqlite.JDBC");
-            System.out.println("SQLite JDBC driver loaded successfully");
-        } catch (ClassNotFoundException e) {
-            System.err.println("Error loading SQLite driver: " + e.getMessage());
+    private static MongoDatabase database;
+
+    public static void initializeDatabase() {
+        if (database == null) {
+            try {
+                String mongoUri = "mongodb://mongoadmin:1234@localhost:27017";
+                MongoClient mongoClient = MongoClients.create(mongoUri);
+                database = mongoClient.getDatabase("mydatabase");
+                System.out.println("MongoDB connected successfully!");
+            } catch (Exception e) {
+                System.err.println("Error connecting to MongoDB: " + e.getMessage());
+            }
         }
     }
 
-    public static Connection getConnection() throws SQLException {
-        // Initialize database on first connection
-        if (!initialized) {
-            initialized = true;
-            initializeDatabase();
-        }
-        return DriverManager.getConnection(DB_URL);
-    }
-    
-    private static void initializeDatabase() {
-        try (Connection conn = DriverManager.getConnection(DB_URL);
-             Statement stmt = conn.createStatement()) {
-            
-            stmt.execute("CREATE TABLE IF NOT EXISTS users (" +
-                         "id INTEGER PRIMARY KEY, " +
-                         "username TEXT NOT NULL, " +
-                         "email TEXT NOT NULL, " +
-                         "password TEXT NOT NULL)");
-            System.out.println("Database initialized successfully");
-
-        } catch (SQLException e) {
-            System.err.println("Error initializing database: " + e.getMessage());
+    public static MongoDatabase getDatabase() {
+        if (database == null) {
+            throw new IllegalStateException("Database not initialized. Call initializeDatabase() first.");
+        } else {
+            return database;
         }
     }
-
 
 }
 
 class UserManager {
+    MongoCollection<Document> collection;
+    private final String collectionName = "users";
 
     public UserManager() {
         try {
-            DatabaseManager.getConnection().close();
-        } catch (SQLException e) {
-            System.err.println("Error initializing user manager: " + e.getMessage());
+            DatabaseManager.initializeDatabase();
+            MongoDatabase database = DatabaseManager.getDatabase();
+            createdUserCollection(database);
+            collection = database.getCollection(collectionName);
+        } catch (Exception e) {
+            System.err.println("Error initializing user collection: " + e.getMessage());
+        }
+    }
+
+    private void createdUserCollection(MongoDatabase db) {
+        List<String> collectionNames = db.listCollectionNames().into(new ArrayList<>());
+
+        if (collectionNames.contains(collectionName)) {
+            System.out.println("users collection already exists.");
+        } else {
+            System.out.println("users does not exists.");
+            db.createCollection(collectionName);
         }
     }
 
@@ -315,24 +342,16 @@ class UserManager {
             return null;
         }
 
-        try (Connection conn = DatabaseManager.getConnection();
-            PreparedStatement stmt = conn.prepareStatement(
-                "INSERT INTO users (id, username, email, password) VALUES (?, ?, ?, ?)")) {
-
-            stmt.setInt(1, user.getId());
-            stmt.setString(2, user.getUsername());
-            stmt.setString(3, user.getEmail());
-            stmt.setString(4, user.getPassword());
-
-            int rowsAffected = stmt.executeUpdate();
-            if (rowsAffected > 0) {
-                return user;
-            }
-            return null;
-        } catch (SQLException e) {
+        try {
+            Document newUser = new Document("username_test", "new_username_test");
+            collection.insertOne(newUser);
+            System.out.println("User inserted correctly");
+            return user;
+        } catch (Exception e) {
             System.err.println("Error adding user: " + e.getMessage());
-            return null;
         }
+
+        return null;
     }
 
     public User updateUser(int id, String username, String email, String password) {
@@ -340,81 +359,82 @@ class UserManager {
         if (existingUser == null || id <= 0) {
             return null;
         }
-        if (email.trim().isEmpty()|| password.trim().isEmpty()) {
+        if (email.trim().isEmpty() || password.trim().isEmpty()) {
             return null;
         }
 
-        try (Connection conn = DatabaseManager.getConnection();
-             PreparedStatement stmt = conn.prepareStatement(
-                 "UPDATE users SET username = ?, email = ?, password = ? WHERE id = ?")) {
-                 
-                 
-            stmt.setString(1, username != null ? username : existingUser.getUsername());
-            stmt.setString(2, email != null ? email : existingUser.getEmail());
-            stmt.setString(3, password != null ? password : existingUser.getPassword());
-            stmt.setInt(4, id);
-            
-            int rowsAffected = stmt.executeUpdate();
-            if (rowsAffected > 0) {
-                return getUser(id);
-            }
-            return null;
-        } catch (SQLException e) {
-            System.err.println("Error updating user: " + e.getMessage());
-            return null;
-        }
+        // try (Connection conn = DatabaseManager.getConnection();
+        // PreparedStatement stmt = conn.prepareStatement(
+        // "UPDATE users SET username = ?, email = ?, password = ? WHERE id = ?")) {
+
+        // stmt.setString(1, username != null ? username : existingUser.getUsername());
+        // stmt.setString(2, email != null ? email : existingUser.getEmail());
+        // stmt.setString(3, password != null ? password : existingUser.getPassword());
+        // stmt.setInt(4, id);
+
+        // int rowsAffected = stmt.executeUpdate();
+        // if (rowsAffected > 0) {
+        // return getUser(id);
+        // }
+        // return null;
+        // } catch (SQLException e) {
+        // System.err.println("Error updating user: " + e.getMessage());
+        // return null;
+        // }
+        return null; // temporary for testing purposes
     }
 
     public boolean deleteUser(int id, String username, String email, String password) {
         User existingUser = getUser(id);
         if (existingUser == null ||
-            !existingUser.getUsername().equals(username) ||
-            !existingUser.getEmail().equals(email)) {
+                !existingUser.getUsername().equals(username) ||
+                !existingUser.getEmail().equals(email)) {
             return false;
         }
 
-        try (Connection conn = DatabaseManager.getConnection();
-             PreparedStatement stmt = conn.prepareStatement(
-                 "DELETE FROM users WHERE id = ?")) {
-                 
-            stmt.setInt(1, id);
-            
-            int rowsAffected = stmt.executeUpdate();
-            return rowsAffected > 0;
-        } catch (SQLException e) {
-            System.err.println("Error deleting user: " + e.getMessage());
-            return false;
-        }
+        // try (Connection conn = DatabaseManager.getConnection();
+        // PreparedStatement stmt = conn.prepareStatement(
+        // "DELETE FROM users WHERE id = ?")) {
+
+        // stmt.setInt(1, id);
+
+        // int rowsAffected = stmt.executeUpdate();
+        // return rowsAffected > 0;
+        // } catch (SQLException e) {
+        // System.err.println("Error deleting user: " + e.getMessage());
+        // return false;
+        // }
+        return false; // temporary for testing purposes
     }
 
     public User getUser(int id) {
-        try (Connection conn = DatabaseManager.getConnection();
-             PreparedStatement stmt = conn.prepareStatement(
-                 "SELECT * FROM users WHERE id = ?")) {
-                 
-            stmt.setInt(1, id);
-            
-            try (ResultSet rs = stmt.executeQuery()) {
-                if (rs.next()) {
-                    return new User(
-                        rs.getInt("id"),
-                        rs.getString("username"),
-                        rs.getString("email"),
-                        rs.getString("password")
-                    );
-                }
-                return null;
-            }
-        } catch (SQLException e) {
-            System.err.println("Error retrieving user: " + e.getMessage());
-            return null;
-        }
+        // try (Connection conn = DatabaseManager.getConnection();
+        // PreparedStatement stmt = conn.prepareStatement(
+        // "SELECT * FROM users WHERE id = ?")) {
+
+        // stmt.setInt(1, id);
+
+        // try (ResultSet rs = stmt.executeQuery()) {
+        // if (rs.next()) {
+        // return new User(
+        // rs.getInt("id"),
+        // rs.getString("username"),
+        // rs.getString("email"),
+        // rs.getString("password")
+        // );
+        // }
+        // return null;
+        // }
+        // } catch (SQLException e) {
+        // System.err.println("Error retrieving user: " + e.getMessage());
+        // return null;
+        // }
+        return null; // Temporary
     }
 }
 
 class UserHandler implements HttpHandler {
     private static UserManager userManager = new UserManager();
-    
 
     @Override
     public void handle(HttpExchange exchange) throws IOException {
@@ -489,32 +509,39 @@ class UserHandler implements HttpHandler {
             return;
         }
         switch (command) {
-            case "create" -> handleCreateUser(exchange, requestData);
-            case "update" -> handleUpdateUser(exchange, requestData); 
-            case "delete" -> handleDeleteUser(exchange, requestData);
-            default -> sendErrorResponse(exchange, 400, "");
+            case "create":
+                handleCreateUser(exchange, requestData);
+                break;
+            case "update":
+                handleUpdateUser(exchange, requestData);
+                break;
+            case "delete":
+                handleDeleteUser(exchange, requestData);
+                break;
+            default:
+                sendErrorResponse(exchange, 400, "");
         }
     }
 
     private void handleGet(HttpExchange exchange) throws IOException {
         String path = exchange.getRequestURI().getPath();
         String[] segments = path.split("/");
-        
+
         if (segments.length != 3) {
             sendErrorResponse(exchange, 400, "");
             return;
         }
-    
+
         try {
             int id = Integer.parseInt(segments[2]);
             User user = userManager.getUser(id);
-    
+
             if (user != null) {
                 // Pass null as command to exclude it from the response
                 sendResponse(exchange, 200, user.toResponseString(null));
             } else {
                 sendErrorResponse(exchange, 404, "User not found");
-            }   
+            }
         } catch (NumberFormatException e) {
             sendErrorResponse(exchange, 400, "Invalid user ID");
         }
@@ -526,12 +553,10 @@ class UserHandler implements HttpHandler {
             String username = requestData.get("username");
             String email = requestData.get("email");
             String password = requestData.get("password");
-            String regexPattern = "^(?=.{1,64}@)[A-Za-z0-9_-]+(\\.[A-Za-z0-9_-]+)*@" 
-        + "[^-][A-Za-z0-9-]+(\\.[A-Za-z0-9-]+)*(\\.[A-Za-z]{2,})$";
+            String regexPattern = "^(?=.{1,64}@)[A-Za-z0-9_-]+(\\.[A-Za-z0-9_-]+)*@"
+                    + "[^-][A-Za-z0-9-]+(\\.[A-Za-z0-9-]+)*(\\.[A-Za-z]{2,})$";
             boolean valid_email = Pattern.compile(regexPattern).matcher(email).matches();
 
-            
-            
             if (username == null || email == null || !valid_email || password == null) {
                 sendErrorResponse(exchange, 400, "");
                 return;
@@ -539,13 +564,13 @@ class UserHandler implements HttpHandler {
 
             User user = new User(id, username, email, password);
 
-            if (userManager.getUser(id) != null) {
-                sendErrorResponse(exchange, 400, "");
-                return;
-            }
-            
+            // if (userManager.getUser(id) != null) {
+            // sendErrorResponse(exchange, 400, "");
+            // return;
+            // }
+
             User createdUser = userManager.addUser(user);
-            
+
             if (createdUser == null) {
                 sendErrorResponse(exchange, 400, "");
                 return;
@@ -601,7 +626,8 @@ class UserHandler implements HttpHandler {
     }
 
     private String getRequestBody(HttpExchange exchange) throws IOException {
-        try (BufferedReader reader = new BufferedReader(new InputStreamReader(exchange.getRequestBody(), StandardCharsets.UTF_8))) {
+        try (BufferedReader reader = new BufferedReader(
+                new InputStreamReader(exchange.getRequestBody(), StandardCharsets.UTF_8))) {
             StringBuilder sb = new StringBuilder();
             String line;
             while ((line = reader.readLine()) != null) {

@@ -40,13 +40,13 @@ def parse_workload(file_path):
             
             parts = line.split()
 
-            if len(parts) == 1 and parts[0].lower() == "shutdown":
-                handle_shutdown()
-                continue
+            # if len(parts) == 1 and parts[0].lower() == "shutdown":
+            #     handle_shutdown()
+            #     continue
                 
-            if len(parts) == 1 and parts[0].lower() == "restart":
-                handle_restart()
-                continue
+            # if len(parts) == 1 and parts[0].lower() == "restart":
+            #     handle_restart()
+            #     continue
 
             service = parts[0].upper()
             action = parts[1].lower()

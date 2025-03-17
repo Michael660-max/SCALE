@@ -1,4 +1,0 @@
-restart
-USER get 1
-PRODUCT info 1
-ORDER info 1

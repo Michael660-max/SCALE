@@ -1,8 +1,7 @@
 {
-    "java.project.sourcePaths": [
-        "src\\OrderService",
-        "src\\ProductService",
-        "src\\UserService"
-    ],
-    "java.project.referencedLibraries": []
+    "java.project.sourcePaths": ["src"],
+    "java.project.referencedLibraries": [
+        "lib/MongoDB JDBC 2.2.2.jar",
+        "lib/sqlite-jdbc-3.49.1.0.jar"
+    ]
 }

@@ -1,5 +1,0 @@
-PRODUCT create 2 productname-2398 aaaaa 3.99 9
-PRODUCT info 2
-PRODUCT update 2 name:granola price:4.99 quantity:20
-PRODUCT DELETE 2 granola 4.99 20
-PRODUCT info 2

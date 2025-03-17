@@ -10,15 +10,15 @@ mkdir -p "$COMPILED_DIR"
 
 # Compilation function
 compile() {
-    # Create directories if they don't exist
+    # Ensure the compiled directory exists
     mkdir -p "$COMPILED_DIR/UserService"
     mkdir -p "$COMPILED_DIR/ProductService"
     mkdir -p "$COMPILED_DIR/OrderService"
 
-    # Compile with verbose output to see what's happening
-    cd "$ROOT_DIR/src/OrderService" && javac -d "$COMPILED_DIR/OrderService" OrderService.java && cd "$ROOT_DIR"
-    cd "$ROOT_DIR/src/UserService" && javac -d "$COMPILED_DIR/UserService" UserService.java && cd "$ROOT_DIR"
-    cd "$ROOT_DIR/src/ProductService" && javac -d "$COMPILED_DIR/ProductService" ProductService.java && cd "$ROOT_DIR"
+    # Compile each service with dependencies
+    cd "$ROOT_DIR/src/OrderService" && javac -cp "$LIB_DIR/*" -d "$COMPILED_DIR/OrderService" OrderService.java && cd "$ROOT_DIR"
+    cd "$ROOT_DIR/src/UserService" && javac -cp "$LIB_DIR/*" -d "$COMPILED_DIR/UserService" UserService.java && cd "$ROOT_DIR"
+    cd "$ROOT_DIR/src/ProductService" && javac -cp "$LIB_DIR/*" -d "$COMPILED_DIR/ProductService" ProductService.java && cd "$ROOT_DIR"
 
     # Copy config files
     if [ -f "$ROOT_DIR/config.json" ]; then
@@ -30,10 +30,16 @@ compile() {
     fi
 }
 
+mongo_status_check() {
+    echo "Starting MongoDB..."
+    docker-compose up -d # Start if not already started
+}
+
 # Start services
 start_user_service() {
+    mongo_status_check
     cd "$COMPILED_DIR/UserService"
-    java -cp ".:$LIB_DIR/sqlite-jdbc-3.49.1.0.jar:$LIB_DIR/*" UserService config.json
+    java -cp ".:$LIB_DIR/*" UserService config.json
 }
 
 start_product_service() {
