@@ -17,6 +17,7 @@ import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.concurrent.Executors;
 import java.util.regex.*;
 
 public class UserService {
@@ -145,7 +146,11 @@ public class UserService {
         server.createContext("/user", new UserHandler());
         server.createContext("/shutdown", new ShutdownHandler(server));
         server.createContext("/restart", new RestartHandler());
-        server.setExecutor(java.util.concurrent.Executors.newFixedThreadPool(10));
+        //server.setExecutor(java.util.concurrent.Executors.newFixedThreadPool(10));
+        
+        int numProcessors = Runtime.getRuntime().availableProcessors();
+        server.setExecutor(Executors.newFixedThreadPool(numProcessors * 2)); // maybe 3?
+
         server.start();
         
         System.out.println("UserService started on " + bindAddress + ":" + PORT);
@@ -540,7 +545,8 @@ class UserHandler implements HttpHandler {
             User user = new User(id, username, email, password);
 
             if (userManager.getUser(id) != null) {
-                sendErrorResponse(exchange, 400, "");
+                // sendErrorResponse(exchange, 400, "");
+                sendErrorResponse(exchange, 409, "");
                 return;
             }
             

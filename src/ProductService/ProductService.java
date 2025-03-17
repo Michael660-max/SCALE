@@ -13,6 +13,7 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.*;
+import java.util.concurrent.Executors;
 
 public class ProductService {
     private static int PORT;
@@ -110,7 +111,11 @@ public class ProductService {
         server.createContext("/product", new ProductHandler());
         server.createContext("/shutdown", new ShutdownHandler(server));
         server.createContext("/restart", new RestartHandler());
-        server.setExecutor(java.util.concurrent.Executors.newFixedThreadPool(10));
+        //server.setExecutor(java.util.concurrent.Executors.newFixedThreadPool(10));
+
+        int numProcessors = Runtime.getRuntime().availableProcessors();
+        server.setExecutor(Executors.newFixedThreadPool(numProcessors * 2)); // maybe 3?
+
         server.start();
 
         System.out.println("ProductService started on port " + PORT);
