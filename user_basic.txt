@@ -1,0 +1,17 @@
+USER create 1 userA userA@email.com pass123
+USER create 2 userB userB@email.com pass456
+USER create 3 userC userC@email.com pass789
+
+USER get 1   # Should return userA
+USER get 2   # Should return userB
+USER get 99  # Should return 404
+
+USER update 1 username:newUserA email:newUserA@email.com password:newPass123
+USER update 99 username:ghost email:ghost@email.com password:ghostPass
+
+USER delete 2 userB userB@email.com pass456
+USER delete 2 userB userB@email.com pass456
+USER delete 99 ghost ghost@email.com ghostPass
+
+USER get 2
+USER get 3

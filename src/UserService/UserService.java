@@ -18,10 +18,17 @@ import java.util.regex.Pattern;
 
 import org.bson.Document;
 
+import com.mongodb.ErrorCategory;
+import com.mongodb.MongoWriteException;
 import com.mongodb.client.MongoClient;
 import com.mongodb.client.MongoClients;
 import com.mongodb.client.MongoCollection;
 import com.mongodb.client.MongoDatabase;
+import com.mongodb.client.model.Filters;
+import com.mongodb.client.model.Updates;
+import com.mongodb.client.result.DeleteResult;
+import com.mongodb.client.result.InsertOneResult;
+import com.mongodb.client.result.UpdateResult;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpHandler;
 import com.sun.net.httpserver.HttpServer;
@@ -311,20 +318,18 @@ class UserManager {
         try {
             DatabaseManager.initializeDatabase();
             MongoDatabase database = DatabaseManager.getDatabase();
-            createdUserCollection(database);
+            createUserCollection(database);
             collection = database.getCollection(collectionName);
+            collection.createIndex(new Document("id", 1));
         } catch (Exception e) {
             System.err.println("Error initializing user collection: " + e.getMessage());
         }
     }
 
-    private void createdUserCollection(MongoDatabase db) {
+    private void createUserCollection(MongoDatabase db) {
         List<String> collectionNames = db.listCollectionNames().into(new ArrayList<>());
 
-        if (collectionNames.contains(collectionName)) {
-            System.out.println("users collection already exists.");
-        } else {
-            System.out.println("users does not exists.");
+        if (!collectionNames.contains(collectionName)) {
             db.createCollection(collectionName);
         }
     }
@@ -343,14 +348,23 @@ class UserManager {
         }
 
         try {
-            Document newUser = new Document("username_test", "new_username_test");
-            collection.insertOne(newUser);
-            System.out.println("User inserted correctly");
-            return user;
+            Document newUser = new Document("id", user.getId()).append("username", user.getUsername())
+                    .append("email", user.getEmail()).append("password", user.getPassword());
+            InsertOneResult result = collection.insertOne(newUser);
+            if (result.getInsertedId() != null) {
+                System.out.println("User inserted correctly");
+                return user;
+            } else {
+                System.out.println("User not inserted");
+                return null;
+            }
+        } catch (MongoWriteException e) {
+            if (e.getError().getCategory() == ErrorCategory.DUPLICATE_KEY) {
+                System.err.println("Error: User ID already exists.");
+            }
         } catch (Exception e) {
             System.err.println("Error adding user: " + e.getMessage());
         }
-
         return null;
     }
 
@@ -362,74 +376,47 @@ class UserManager {
         if (email.trim().isEmpty() || password.trim().isEmpty()) {
             return null;
         }
+        UpdateResult result = collection.updateOne(Filters.eq("id", id), Updates.combine(
+                Updates.set("username", username),
+                Updates.set("email", email),
+                Updates.set("password", password)));
 
-        // try (Connection conn = DatabaseManager.getConnection();
-        // PreparedStatement stmt = conn.prepareStatement(
-        // "UPDATE users SET username = ?, email = ?, password = ? WHERE id = ?")) {
-
-        // stmt.setString(1, username != null ? username : existingUser.getUsername());
-        // stmt.setString(2, email != null ? email : existingUser.getEmail());
-        // stmt.setString(3, password != null ? password : existingUser.getPassword());
-        // stmt.setInt(4, id);
-
-        // int rowsAffected = stmt.executeUpdate();
-        // if (rowsAffected > 0) {
-        // return getUser(id);
-        // }
-        // return null;
-        // } catch (SQLException e) {
-        // System.err.println("Error updating user: " + e.getMessage());
-        // return null;
-        // }
-        return null; // temporary for testing purposes
+        if (result.getModifiedCount() > 0) {
+            return getUser(id);
+        } else {
+            return null;
+        }
     }
 
     public boolean deleteUser(int id, String username, String email, String password) {
         User existingUser = getUser(id);
         if (existingUser == null ||
                 !existingUser.getUsername().equals(username) ||
-                !existingUser.getEmail().equals(email)) {
+                !existingUser.getEmail().equals(email) ||
+                !existingUser.getPassword().equals(password)) {
             return false;
         }
-
-        // try (Connection conn = DatabaseManager.getConnection();
-        // PreparedStatement stmt = conn.prepareStatement(
-        // "DELETE FROM users WHERE id = ?")) {
-
-        // stmt.setInt(1, id);
-
-        // int rowsAffected = stmt.executeUpdate();
-        // return rowsAffected > 0;
-        // } catch (SQLException e) {
-        // System.err.println("Error deleting user: " + e.getMessage());
-        // return false;
-        // }
-        return false; // temporary for testing purposes
+        DeleteResult result = collection.deleteOne(Filters.eq("id", id));
+        if (result.getDeletedCount() > 0) {
+            return true;
+        } else {
+            System.out.println("No documents were deleted.");
+            return false;
+        }
     }
 
     public User getUser(int id) {
-        // try (Connection conn = DatabaseManager.getConnection();
-        // PreparedStatement stmt = conn.prepareStatement(
-        // "SELECT * FROM users WHERE id = ?")) {
-
-        // stmt.setInt(1, id);
-
-        // try (ResultSet rs = stmt.executeQuery()) {
-        // if (rs.next()) {
-        // return new User(
-        // rs.getInt("id"),
-        // rs.getString("username"),
-        // rs.getString("email"),
-        // rs.getString("password")
-        // );
-        // }
-        // return null;
-        // }
-        // } catch (SQLException e) {
-        // System.err.println("Error retrieving user: " + e.getMessage());
-        // return null;
-        // }
-        return null; // Temporary
+        try {
+            Document foundUser = collection.find(Filters.eq("id", id)).first();
+            if (foundUser != null) {
+                return new User(foundUser.getInteger("id"), foundUser.getString("username"),
+                        foundUser.getString("email"), foundUser.getString("password"));
+            }
+            return null;
+        } catch (Exception e) {
+            System.err.println("Error adding user: " + e.getMessage());
+            return null;
+        }
     }
 }
 

@@ -1,0 +1,35 @@
+USER create 2 username2NKlLXs elOf@Y4vxdHuRs2620f.com bY3NAKPS
+USER create 3 usernameKPTgmeH 36a9@hbCa.com gOmaQKKw
+USER create 4 usernameFw5hdTh CYDJ@vMLrNA.com GMmhdr6J
+
+USER get 2
+USER get 3
+USER get 4
+
+USER get 99
+
+USER update 2 username:un-4Vofkp8EyolNJYJ email:glud@Ucdl4s6HBjq.com password:BkPpkkW1
+USER update 3 username:un-BhxQtm2AAJZZAt3 email:ZwN1@ABiDLCNO9T.com password:wDkglEM2
+USER update 4 username:un-6l2yS4n2P2PB77s email:TRhU@L3aKAYoMS8.com password:UpX6pI0F
+
+USER update 99 username:randomUser email:random@email.com password:randomPass
+
+USER delete 2 un-4Vofkp8EyolNJYJ glud@Ucdl4s6HBjq.com BkPpkkW1
+
+USER delete 3 wrongUser wrong@email.com wrongPass
+
+USER delete 2 un-4Vofkp8EyolNJYJ glud@Ucdl4s6HBjq.com BkPpkkW1
+
+USER get 2
+
+USER get 3
+USER get 4
+
+USER update 2 username:un-HofHCZu5GlVLLLz email:CDj0@n9HUYJpUuY.com password:0S0YJnb5
+USER update 2 username:un-j2ejWGkAd3Rzv4C email:rPhV@NypRd7qmDMKda.com password:9cxYT5iV
+
+USER delete 2 un-j2ejWGkAd3Rzv4C rPhV@NypRd7qmDMKda.com 9cxYT5iV
+
+USER get 2
+USER get 3
+USER get 4

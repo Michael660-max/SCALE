@@ -1,1 +1,0 @@
-USER create 1 alice alice@example.com secret123
