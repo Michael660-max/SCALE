@@ -1,0 +1,14 @@
+PRODUCT create 1 product001 SnackBar 2.99 10
+PRODUCT create 2 product002 EnergyDrink 3.49 15
+PRODUCT create 3 product003 ProteinPowder 24.99 5
+
+PRODUCT info 1
+PRODUCT info 2
+PRODUCT info 3
+
+PRODUCT update 3 name:ProteinShake description:HighProteinShake price:26.99 quantity:8
+
+PRODUCT delete 2 EnergyDrink 3.49 15
+
+PRODUCT info 2
+PRODUCT info 3

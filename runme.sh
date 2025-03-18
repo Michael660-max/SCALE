@@ -43,10 +43,12 @@ start_user_service() {
 }
 
 start_product_service() {
+    mongo_status_check
     cd "$COMPILED_DIR/ProductService" && java -cp ".:$LIB_DIR/*" ProductService config.json
 }
 
 start_order_service() {
+    mongo_status_check
     cd "$COMPILED_DIR/OrderService" && java -cp ".:$LIB_DIR/*" OrderService config.json
 }
 

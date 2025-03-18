@@ -7,19 +7,27 @@ import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Paths;
-import java.sql.Connection;
-import java.sql.DriverManager;
-import java.sql.PreparedStatement;
-import java.sql.ResultSet;
-import java.sql.SQLException;
-import java.sql.Statement;
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
+import org.bson.Document;
+
+import com.mongodb.ErrorCategory;
+import com.mongodb.MongoWriteException;
+import com.mongodb.client.MongoClient;
+import com.mongodb.client.MongoClients;
+import com.mongodb.client.MongoCollection;
+import com.mongodb.client.MongoDatabase;
+import com.mongodb.client.model.Filters;
+import com.mongodb.client.model.Updates;
+import com.mongodb.client.result.DeleteResult;
+import com.mongodb.client.result.InsertOneResult;
+import com.mongodb.client.result.UpdateResult;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpHandler;
 import com.sun.net.httpserver.HttpServer;
-
 
 public class ProductService {
     private static int PORT;
@@ -38,11 +46,11 @@ public class ProductService {
             if (productService != null) {
                 String portStr = productService.get("port");
                 String ipStr = productService.get("ip");
-                
+
                 if (portStr != null) {
                     PORT = Integer.parseInt(portStr);
                 }
-                
+
                 if (ipStr != null) {
                     IP = ipStr;
                 }
@@ -55,51 +63,53 @@ public class ProductService {
 
     private static Map<String, Map<String, String>> parseNestedJson(String json) {
         Map<String, Map<String, String>> result = new HashMap<>();
-        
+
         json = json.trim();
         if (json.startsWith("{") && json.endsWith("}")) {
             json = json.substring(1, json.length() - 1);
         }
-        
+
         String[] topLevelEntries = json.split("},");
         for (String entry : topLevelEntries) {
             entry = entry.trim();
             if (!entry.endsWith("}")) {
                 entry += "}";
             }
-    
+
             int colonIndex = entry.indexOf(":");
-            if (colonIndex == -1) continue;
-            
+            if (colonIndex == -1)
+                continue;
+
             String key = entry.substring(0, colonIndex).replaceAll("[\"{}]", "").trim();
             String value = entry.substring(colonIndex + 1).trim();
-            
+
             Map<String, String> nestedMap = parseInnerObject(value);
             result.put(key, nestedMap);
         }
-        
+
         return result;
     }
 
     private static Map<String, String> parseInnerObject(String json) {
         Map<String, String> result = new HashMap<>();
-        
+
         json = json.trim();
         if (json.startsWith("{") && json.endsWith("}")) {
             json = json.substring(1, json.length() - 1);
         }
-        
+
         String[] pairs = json.split(",");
         for (String pair : pairs) {
             int colonIndex = pair.indexOf(":");
-            if (colonIndex == -1) continue;
-            
+            if (colonIndex == -1)
+                continue;
+
             String key = pair.substring(0, colonIndex).replaceAll("[\"{}]", "").trim();
             String value = pair.substring(colonIndex + 1).replaceAll("[\"{}]", "").trim();
-            
+
             result.put(key, value);
         }
-        
+
         return result;
     }
 
@@ -109,7 +119,7 @@ public class ProductService {
 
         // Use IP from config, defaulting to 0.0.0.0 if not set
         String bindAddress = (IP != null && !IP.isEmpty()) ? IP : "0.0.0.0";
-        
+
         // Ensure PORT is valid
         if (PORT <= 0) {
             PORT = 15000; // Default port
@@ -120,16 +130,16 @@ public class ProductService {
         server.setExecutor(java.util.concurrent.Executors.newFixedThreadPool(10));
         server.start();
 
-        System.out.println("ProductService started on port " + PORT);
+        System.out.println("UserService started on " + bindAddress + ":" + PORT);
     }
 
     static class ShutdownHandler implements HttpHandler {
         private final HttpServer server;
-        
+
         public ShutdownHandler(HttpServer server) {
             this.server = server;
         }
-        
+
         @Override
         public void handle(HttpExchange exchange) throws IOException {
             String response = "{\"status\":\"shutting_down\"}";
@@ -138,12 +148,12 @@ public class ProductService {
             OutputStream os = exchange.getResponseBody();
             os.write(response.getBytes());
             os.close();
-            
+
             System.out.println("Shutdown command received, shutting down ProductService");
             server.stop(0);
         }
     }
-    
+
     static class RestartHandler implements HttpHandler {
         @Override
         public void handle(HttpExchange exchange) throws IOException {
@@ -153,7 +163,7 @@ public class ProductService {
             OutputStream os = exchange.getResponseBody();
             os.write(response.getBytes());
             os.close();
-            
+
             System.out.println("Restart command received by ProductService");
         }
     }
@@ -175,109 +185,125 @@ class Product {
     }
 
     // Getters and setters remain the same
-    public int getId() { return id; }
-    public String getName() { return name; }
-    public String getDescription() { return description; }
-    public double getPrice() { return price; }
-    public int getQuantity() { return quantity; }
-    public void setName(String name) { this.name = name; }
-    public void setDescription(String description) { this.description = description; }
-    public void setPrice(double price) { this.price = price; }
-    public void setQuantity(int quantity) { this.quantity = quantity; }
+    public int getId() {
+        return id;
+    }
+
+    public String getName() {
+        return name;
+    }
+
+    public String getDescription() {
+        return description;
+    }
+
+    public double getPrice() {
+        return price;
+    }
+
+    public int getQuantity() {
+        return quantity;
+    }
+
+    public void setName(String name) {
+        this.name = name;
+    }
+
+    public void setDescription(String description) {
+        this.description = description;
+    }
+
+    public void setPrice(double price) {
+        this.price = price;
+    }
+
+    public void setQuantity(int quantity) {
+        this.quantity = quantity;
+    }
 
     public String toResponseString(String command) {
         if (command == null) {
             return String.format(
-                "{\"id\":%d,\"name\":\"%s\",\"description\":\"%s\",\"price\":%.2f,\"quantity\":%d}",
-                id, name, description, price, quantity
-            );
+                    "{\"id\":%d,\"name\":\"%s\",\"description\":\"%s\",\"price\":%.2f,\"quantity\":%d}",
+                    id, name, description, price, quantity);
         } else {
             return String.format(
-                "{\"id\":%d,\"name\":\"%s\",\"description\":\"%s\",\"price\":%.2f,\"quantity\":%d,\"command\":\"%s\"}",
-                id, name, description, price, quantity, command
-            );
+                    "{\"id\":%d,\"name\":\"%s\",\"description\":\"%s\",\"price\":%.2f,\"quantity\":%d,\"command\":\"%s\"}",
+                    id, name, description, price, quantity, command);
         }
     }
 }
 
 class DatabaseManager {
-    private static final String DB_URL = "jdbc:sqlite:products.db";
-    private static boolean initialized = false;
+    private static MongoDatabase database;
 
-    static {
-        try {
-            Class.forName("org.sqlite.JDBC");
-            System.out.println("SQLite JDBC driver loaded successfully");
-        } catch (ClassNotFoundException e) {
-            System.err.println("Error loading SQLite driver: " + e.getMessage());
+    public static void initializeDatabase() {
+        if (database == null) {
+            try {
+                String mongoUri = "mongodb://mongoadmin:1234@localhost:27017";
+                MongoClient mongoClient = MongoClients.create(mongoUri);
+                database = mongoClient.getDatabase("mydatabase");
+                System.out.println("MongoDB connected successfully on PRODUCT service!");
+            } catch (Exception e) {
+                System.err.println("Error connecting to MongoDB: " + e.getMessage());
+            }
         }
     }
 
-    public static Connection getConnection() throws SQLException {
-        // Initialize database on first connection
-        if (!initialized) {
-            initialized = true;
-            initializeDatabase();
-        }
-        return DriverManager.getConnection(DB_URL);
-    }
-    
-    private static void initializeDatabase() {
-        try (Connection conn = DriverManager.getConnection(DB_URL);
-             Statement stmt = conn.createStatement()) {
-            
-            stmt.execute("CREATE TABLE IF NOT EXISTS products (" +
-                         "id INTEGER PRIMARY KEY, " +
-                         "name TEXT NOT NULL, " +
-                         "description TEXT NOT NULL, " +
-                         "price REAL NOT NULL, " +
-                         "quantity INT NOT NULL)");
-            System.out.println("Database initialized successfully");
-
-        } catch (SQLException e) {
-            System.err.println("Error initializing database: " + e.getMessage());
+    public static MongoDatabase getDatabase() {
+        if (database == null) {
+            throw new IllegalStateException("Database not initialized. Call initializeDatabase() first.");
+        } else {
+            return database;
         }
     }
 }
 
 class ProductManager {
-    private Map<Integer, Product> products;
+    MongoCollection<Document> collection;
+    private final String collectionName = "products";
 
     public ProductManager() {
         try {
-            DatabaseManager.getConnection().close();
-        } catch (SQLException e) {
-            System.err.println("Error initializing product manager: " + e.getMessage());
+            DatabaseManager.initializeDatabase();
+            MongoDatabase database = DatabaseManager.getDatabase();
+            createProductCollection(database);
+            collection = database.getCollection(collectionName);
+            collection.createIndex(new Document("id", 1));
+        } catch (Exception e) {
+            System.err.println("Error initializing user collection: " + e.getMessage());
+        }
+    }
+
+    private void createProductCollection(MongoDatabase db) {
+        List<String> collectionNames = db.listCollectionNames().into(new ArrayList<>());
+
+        if (!collectionNames.contains(collectionName)) {
+            db.createCollection(collectionName);
         }
     }
 
     public Product addProduct(Product product) {
-        if (product.getName() == null || product.getName().trim().isEmpty()) {
-            return null;
-        }
         if (getProduct(product.getId()) != null) {
             return null;
         }
 
-        try (Connection conn = DatabaseManager.getConnection();
-            PreparedStatement stmt = conn.prepareStatement(
-                "INSERT INTO products (id, name, description, price, quantity) VALUES (?, ?, ?, ?, ?)")) {
-  
-            stmt.setInt(1, product.getId());
-            stmt.setString(2, product.getName());
-            stmt.setString(3, product.getDescription());
-            stmt.setDouble(4, product.getPrice());
-            stmt.setInt(5, product.getQuantity());
-
-            int rowsAffected = stmt.executeUpdate();
-            if (rowsAffected > 0) {
-                return product;
+        try {
+            Document newProduct = new Document("id", product.getId())
+                    .append("name", product.getName())
+                    .append("description", product.getDescription())
+                    .append("price", product.getPrice())
+                    .append("quantity", product.getQuantity());
+            InsertOneResult result = collection.insertOne(newProduct);
+            return (result.getInsertedId() != null) ? product: null;
+        } catch (MongoWriteException e) {
+            if (e.getError().getCategory() == ErrorCategory.DUPLICATE_KEY) {
+                System.err.println("Error: Product ID already exists.");
             }
-            return null;
-        } catch (SQLException e) {
+        } catch (Exception e) {
             System.err.println("Error adding product: " + e.getMessage());
-            return null;
         }
+        return null;
     }
 
     public Product updateProduct(int id, String name, String description, Double price, Integer quantity) {
@@ -287,75 +313,44 @@ class ProductManager {
         if (existingProduct == null || id <= 0) {
             return null;
         }
-        if (description.trim().isEmpty()) {
-            return null;
-        }
-        try (Connection conn = DatabaseManager.getConnection();
-             PreparedStatement stmt = conn.prepareStatement(
-                 "UPDATE products SET name = ?, description = ?, price = ?, quantity = ? WHERE id = ?")) {
-                 
-            stmt.setString(1, name != null ? name : existingProduct.getName());
-            stmt.setString(2, description != null ? description : existingProduct.getDescription());
-            stmt.setDouble(3, price != null ? price : existingProduct.getPrice());
-            stmt.setInt(4, quantity != null ? quantity : existingProduct.getQuantity());
-            stmt.setInt(5, id);
-        
-            int rowsAffected = stmt.executeUpdate();
-            if (rowsAffected > 0) {
-                return getProduct(id);
-            }
-            return null;
-        } catch (SQLException e) {
-            System.err.println("Error updating product: " + e.getMessage());
-            return null;
-        }
+
+        UpdateResult result = collection.updateOne(Filters.eq("id", id), Updates.combine(
+                Updates.set("name", (name != null) ? name : existingProduct.getName()),
+                Updates.set("description", (description != null) ? description : existingProduct.getDescription()),
+                Updates.set("price", (price != null) ? price : existingProduct.getPrice()),
+                Updates.set("quantity", (quantity != null) ? quantity : existingProduct.getQuantity())));
+
+        return (result.getModifiedCount() > 0) ? getProduct(id): null;
     }
 
     public boolean deleteProduct(int id, String name, Double price, Integer quantity) {
-        Product product = getProduct(id);
-        if (product != null && name != null) {
-            boolean matches = (name.equals(product.getName())) &&
-                              (price.equals(product.getPrice())) &&
-                              (quantity.equals(product.getQuantity()));
-            if (matches) {
-                try (Connection conn = DatabaseManager.getConnection();
-                    PreparedStatement stmt = conn.prepareStatement(
-                        "DELETE FROM products WHERE id = ?")) {
-                        
-                    stmt.setInt(1, id);
-                    
-                    int rowsAffected = stmt.executeUpdate();
-                    return rowsAffected > 0;
-                } catch (SQLException e) {
-                    System.err.println("Error deleting product: " + e.getMessage());
-                    return false;
-                }
-            }
+        Product existingProduct = getProduct(id);
+        if (existingProduct == null ||
+                (name != null && !existingProduct.getName().equals(name)) ||
+                (price != null && Double.compare(existingProduct.getPrice(), price) != 0) ||
+                (quantity != null && existingProduct.getQuantity() != quantity)) {
+            return false;
         }
-        return false;
+        DeleteResult result = collection.deleteOne(Filters.eq("id", id));
+        if (result.getDeletedCount() > 0) {
+            return true;
+        } else {
+            System.out.println("No documents were deleted.");
+            return false;
+        }
     }
 
     public Product getProduct(int id) {
-        try (Connection conn = DatabaseManager.getConnection();
-             PreparedStatement stmt = conn.prepareStatement(
-                 "SELECT * FROM products WHERE id = ?")) {
-                 
-            stmt.setInt(1, id);
-            
-            try (ResultSet rs = stmt.executeQuery()) {
-                if (rs.next()) {
-                    return new Product(
-                        rs.getInt("id"),
-                        rs.getString("name"),
-                        rs.getString("description"),
-                        rs.getDouble("price"),
-                        rs.getInt("quantity")
-                    );
-                }
-                return null;
+        try {
+            Document foundProduct = collection.find(Filters.eq("id", id)).first();
+            if (foundProduct != null) {
+                return new Product(foundProduct.getInteger("id"), foundProduct.getString("name"),
+                        foundProduct.getString("description"), foundProduct.getDouble("price"),
+                        foundProduct.getInteger("quantity"));
             }
-        } catch (SQLException e) {
-            System.err.println("Error retrieving product: " + e.getMessage());
+            return null;
+        } catch (Exception e) {
+            System.err.println("Error getting product: " + e.getMessage());
             return null;
         }
     }
@@ -405,21 +400,21 @@ class ProductHandler implements HttpHandler {
     private void handleGet(HttpExchange exchange) throws IOException {
         String path = exchange.getRequestURI().getPath();
         String[] segments = path.split("/");
-        
+
         if (segments.length != 3) {
             sendErrorResponse(exchange, 400, "");
             return;
         }
-    
+
         try {
             int id = Integer.parseInt(segments[2]);
             Product product = productManager.getProduct(id);
-    
+
             if (product != null) {
                 sendResponse(exchange, 200, product.toResponseString(null));
             } else {
                 sendErrorResponse(exchange, 404, "");
-            }   
+            }
         } catch (NumberFormatException e) {
             sendErrorResponse(exchange, 400, "");
         }
@@ -440,13 +435,8 @@ class ProductHandler implements HttpHandler {
 
             Product product = new Product(id, name, description, price, quantity);
 
-            if (productManager.getProduct(id) != null) {
-                sendErrorResponse(exchange, 409, "");
-                return;
-            }
-            
             Product createdProduct = productManager.addProduct(product);
-            
+
             if (createdProduct == null) {
                 sendErrorResponse(exchange, 400, "");
                 return;
@@ -464,13 +454,13 @@ class ProductHandler implements HttpHandler {
             String name = requestData.get("name");
             String description = requestData.get("description");
             Double price = requestData.containsKey("price") ? Double.parseDouble(requestData.get("price")) : null;
-            Integer quantity = requestData.containsKey("quantity") ? Integer.parseInt(requestData.get("quantity")) : null;
-            
-            if (price != null && price < 0 || quantity != null && quantity < 0 ) {
+            Integer quantity = requestData.containsKey("quantity") ? Integer.parseInt(requestData.get("quantity"))
+                    : null;
+
+            if (price != null && price < 0 || quantity != null && quantity < 0) {
                 sendErrorResponse(exchange, 400, "");
                 return;
             }
-
 
             Product updatedProduct = productManager.updateProduct(id, name, description, price, quantity);
             if (updatedProduct == null) {
@@ -489,10 +479,11 @@ class ProductHandler implements HttpHandler {
             int id = Integer.parseInt(requestData.get("id"));
             String name = requestData.get("name");
             Double price = requestData.containsKey("price") ? Double.parseDouble(requestData.get("price")) : null;
-            Integer quantity = requestData.containsKey("quantity") ? Integer.parseInt(requestData.get("quantity")) : null;
+            Integer quantity = requestData.containsKey("quantity") ? Integer.parseInt(requestData.get("quantity"))
+                    : null;
 
             if (name == null || !productManager.deleteProduct(id, name, price, quantity)) {
-                sendErrorResponse(exchange, 404, "" );
+                sendErrorResponse(exchange, 404, "");
                 return;
             }
 
@@ -503,7 +494,8 @@ class ProductHandler implements HttpHandler {
     }
 
     private String getRequestBody(HttpExchange exchange) throws IOException {
-        try (BufferedReader reader = new BufferedReader(new InputStreamReader(exchange.getRequestBody(), StandardCharsets.UTF_8))) {
+        try (BufferedReader reader = new BufferedReader(
+                new InputStreamReader(exchange.getRequestBody(), StandardCharsets.UTF_8))) {
             StringBuilder sb = new StringBuilder();
             String line;
             while ((line = reader.readLine()) != null) {

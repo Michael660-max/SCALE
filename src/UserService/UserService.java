@@ -17,6 +17,7 @@ import java.util.Map;
 import java.util.regex.Pattern;
 
 import org.bson.Document;
+import org.bson.conversions.Bson;
 
 import com.mongodb.ErrorCategory;
 import com.mongodb.MongoWriteException;
@@ -293,7 +294,7 @@ class DatabaseManager {
                 String mongoUri = "mongodb://mongoadmin:1234@localhost:27017";
                 MongoClient mongoClient = MongoClients.create(mongoUri);
                 database = mongoClient.getDatabase("mydatabase");
-                System.out.println("MongoDB connected successfully!");
+                System.out.println("MongoDB connected successfully on USER service!");
             } catch (Exception e) {
                 System.err.println("Error connecting to MongoDB: " + e.getMessage());
             }
@@ -343,6 +344,10 @@ class UserManager {
             return null;
         }
 
+        if (user.getEmail() == null || user.getEmail().trim().isEmpty()) {
+            return null;
+        }
+
         if (getUser(user.getId()) != null) {
             return null;
         }
@@ -351,13 +356,8 @@ class UserManager {
             Document newUser = new Document("id", user.getId()).append("username", user.getUsername())
                     .append("email", user.getEmail()).append("password", user.getPassword());
             InsertOneResult result = collection.insertOne(newUser);
-            if (result.getInsertedId() != null) {
-                System.out.println("User inserted correctly");
-                return user;
-            } else {
-                System.out.println("User not inserted");
-                return null;
-            }
+            return (result.getInsertedId() != null) ? user: null;
+
         } catch (MongoWriteException e) {
             if (e.getError().getCategory() == ErrorCategory.DUPLICATE_KEY) {
                 System.err.println("Error: User ID already exists.");
@@ -373,36 +373,33 @@ class UserManager {
         if (existingUser == null || id <= 0) {
             return null;
         }
-        if (email.trim().isEmpty() || password.trim().isEmpty()) {
-            return null;
-        }
-        UpdateResult result = collection.updateOne(Filters.eq("id", id), Updates.combine(
-                Updates.set("username", username),
-                Updates.set("email", email),
-                Updates.set("password", password)));
 
-        if (result.getModifiedCount() > 0) {
-            return getUser(id);
-        } else {
-            return null;
-        }
+        List<Bson> updates = new ArrayList<>();
+        if (username != null && !username.trim().isEmpty())
+            updates.add(Updates.set("username", username));
+        if (email != null && !email.trim().isEmpty())
+            updates.add(Updates.set("email", email));
+        if (password != null && !password.trim().isEmpty())
+            updates.add(Updates.set("password", password));
+
+        if (updates.isEmpty())
+            return existingUser;
+
+        UpdateResult result = collection.updateOne(Filters.eq("id", id), Updates.combine(updates));
+        return (result.getModifiedCount() > 0) ? getUser(id) : null;
     }
 
     public boolean deleteUser(int id, String username, String email, String password) {
         User existingUser = getUser(id);
         if (existingUser == null ||
-                !existingUser.getUsername().equals(username) ||
-                !existingUser.getEmail().equals(email) ||
-                !existingUser.getPassword().equals(password)) {
+                (username != null && !existingUser.getUsername().equals(username)) ||
+                (email != null && !existingUser.getEmail().equals(email)) ||
+                (password != null && !existingUser.getPassword().equals(password))) {
             return false;
         }
+
         DeleteResult result = collection.deleteOne(Filters.eq("id", id));
-        if (result.getDeletedCount() > 0) {
-            return true;
-        } else {
-            System.out.println("No documents were deleted.");
-            return false;
-        }
+        return result.getDeletedCount() > 0;
     }
 
     public User getUser(int id) {
@@ -414,7 +411,7 @@ class UserManager {
             }
             return null;
         } catch (Exception e) {
-            System.err.println("Error adding user: " + e.getMessage());
+            System.err.println("Error getting user: " + e.getMessage());
             return null;
         }
     }
@@ -550,11 +547,6 @@ class UserHandler implements HttpHandler {
             }
 
             User user = new User(id, username, email, password);
-
-            // if (userManager.getUser(id) != null) {
-            // sendErrorResponse(exchange, 400, "");
-            // return;
-            // }
 
             User createdUser = userManager.addUser(user);
 

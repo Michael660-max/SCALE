@@ -1,0 +1,39 @@
+PRODUCT create 1 product-001 SnackBar 2.99 10
+PRODUCT create 2 product-002 EnergyDrink 3.49 15
+PRODUCT create 3 product-003 ProteinPowder 24.99 5
+PRODUCT create 4 product-004 GranolaBar 4.99 20
+PRODUCT create 5 product-005 OrganicJuice 8.99 12
+PRODUCT create 6 product-006 FreeSample 0.00 5
+PRODUCT create 7 product-007 LimitedEditionDrink 9.99 0
+PRODUCT create 8 product-008 AlmondButter 6.99 18
+
+PRODUCT create 1 product-001 SnackBar 2.99 10
+PRODUCT create 9 product-009 EMPTY 19.99 8
+PRODUCT create 10 EMPTY VitaminSupplement 29.99 10
+
+PRODUCT info 1
+PRODUCT info 6
+PRODUCT info 7
+PRODUCT info 9
+PRODUCT info 10
+
+PRODUCT update 1 name:ProteinSnack description:HighProteinSnack price:3.49 quantity:8
+PRODUCT update 2 name:EnergyDrink description:EnergyDrink price:3.49 quantity:15
+PRODUCT update 3 name: description:EnhancedProteinPowder price:26.99 quantity:8
+PRODUCT update 4 name:PremiumGranola description:LuxuryGranola price:19.99 quantity:10
+PRODUCT update 5 name:FreshJuice description:ColdPressedJuice price:9.49 quantity:-5
+
+PRODUCT delete 1 ProteinSnack 3.49 8
+PRODUCT delete 2 EnergyDrink 3.49 15
+PRODUCT delete 50 NonExistent 12.99 5
+PRODUCT delete 3 EnhancedProteinPowder -5.99 10
+PRODUCT delete 7 LimitedEditionDrink 9.99 0
+
+PRODUCT info 1
+PRODUCT info 3
+PRODUCT info 4
+PRODUCT info 5
+PRODUCT info 6
+PRODUCT info 7
+PRODUCT info 8
+PRODUCT info 9
