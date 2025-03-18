@@ -793,11 +793,10 @@ class OrderHandler implements HttpHandler {
     private void sendSuccessResponse(HttpExchange exchange, Order order) throws IOException {
         String successJson = String.format(
         "{" +
-        "\"status\":\"Success\"," +
-        "\"id\":%d," +
         "\"product_id\":%d," +
         "\"user_id\":%d," +
         "\"quantity\":%d" +
+        "\"status\":\"Success\"," +
         "}",
         order.id,
         order.productId,
