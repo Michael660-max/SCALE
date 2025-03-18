@@ -2,7 +2,7 @@ import aiohttp
 import asyncio
 import time
 
-URL = "http://127.0.0.1:14003/user"
+URL = "http://127.0.0.1:14001/user"
 REQUESTS_PER_SECOND = 3000  # Set desired RPS
 DURATION = 10  # Test duration in seconds
 
