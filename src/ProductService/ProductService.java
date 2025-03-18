@@ -517,6 +517,7 @@ class ProductHandler implements HttpHandler {
     }
 
     private void sendResponse(HttpExchange exchange, int statusCode, String response) throws IOException {
+        exchange.getResponseHeaders().set("Content-Type", "application/json");
         byte[] responseBytes = response.getBytes(StandardCharsets.UTF_8);
         exchange.sendResponseHeaders(statusCode, responseBytes.length);
         try (OutputStream os = exchange.getResponseBody()) {
