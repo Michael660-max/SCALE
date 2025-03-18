@@ -2,6 +2,7 @@ import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpHandler;
 import com.sun.net.httpserver.HttpServer;
 import java.io.*;
+import java.math.BigInteger;
 import java.net.HttpURLConnection;
 import java.net.InetSocketAddress;
 import java.net.URI;
@@ -10,6 +11,8 @@ import java.net.URL;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Paths;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
@@ -261,14 +264,27 @@ class UserInfo {
         this.password = password;
     }
 
+    private String hashPassword(String password) {
+        try {
+            MessageDigest md = MessageDigest.getInstance("SHA-256");
+            byte[] hash = md.digest(password.getBytes(StandardCharsets.UTF_8));
+            BigInteger number = new BigInteger(1, hash);
+            return number.toString(16);
+        } catch (NoSuchAlgorithmException e) {
+            e.printStackTrace();
+            return "hash_error";
+        }
+    }
+
     public String toJson() {
         StringBuilder sb = new StringBuilder();
         sb.append("{");
         sb.append("\"id\":").append(id).append(",");
         sb.append("\"username\":\"").append(username).append("\",");
         sb.append("\"email\":\"").append(email).append("\",");
-        sb.append("\"password\":\"").append(password).append("\",");
-        sb.append("\"purchasedProducts\":").append(convertMapToJson(purchasedProducts));
+        // sb.append("\"password\":\"").append(password).append("\",");
+        sb.append("\"password\":\"").append(hashPassword(password)).append("\",");
+        // sb.append("\"purchasedProducts\":").append(convertMapToJson(purchasedProducts));
         sb.append("}");
         return sb.toString();
     }
@@ -351,6 +367,32 @@ class UserHandler implements HttpHandler {
             default -> sendErrorResponse(exchange, 400, "Unknown command");
         }
     }
+
+    private void handleGet(HttpExchange exchange) throws IOException {
+        String path = exchange.getRequestURI().getPath();
+        String[] segments = path.split("/");
+        
+        if (segments.length != 3) {
+            sendErrorResponse(exchange, 400, "6");
+            return;
+        }
+        try {
+            int id = Integer.parseInt(segments[2]);
+            if (OrderService.userCache.containsKey(id)) {
+                UserInfo user = OrderService.userCache.get(id);
+                sendResponse(exchange, 200, user.toJson());
+            } else {
+                // sendErrorResponse(exchange, 404, "User not found");
+                try {
+                    forwardRequest(exchange, String.format("http://%s:%s%s", OrderService.USER_SERVER_IP, OrderService.USER_SERVER_PORT, path));
+                } catch (IOException | URISyntaxException e) {
+                    e.printStackTrace();
+                }  
+        }} catch (NumberFormatException e) {
+            sendErrorResponse(exchange, 400, "Invalid user ID");
+    }
+    }
+
     private void handleCreateUser(HttpExchange exchange, Map<String, String> requestData, String url1) throws IOException {
         try {
             
@@ -360,11 +402,11 @@ class UserHandler implements HttpHandler {
         String password = requestData.get("password");
 
         if (username == null || email == null || password == null) {
-            sendErrorResponse(exchange, 400, "");
+            sendErrorResponse(exchange, 400, "1");
             return;
         }
         if (OrderService.userCache.containsKey(id)) {
-            sendErrorResponse(exchange, 409, "");
+            sendErrorResponse(exchange, 409, "2");
             return;
         }
         
@@ -378,7 +420,7 @@ class UserHandler implements HttpHandler {
         } catch (IOException | URISyntaxException e) {
             e.printStackTrace();
         }
-
+        
         //String requestBody = getRequestBody(exchange);
         //String targetUrl = String.format("http://%s:%s/user", OrderService.USER_SERVER_IP, OrderService.USER_SERVER_PORT);
         //forwardRequest(exchange, url1);
@@ -398,9 +440,32 @@ class UserHandler implements HttpHandler {
 
             if (OrderService.userCache.containsKey(id)) {
                 // User exists in cache
+                UserInfo user = OrderService.userCache.get(id);
+                if (username != null) {
+                    user.username = username;
+                }
+                if (email != null) {
+                    user.email = email;
+                }
+                if (password != null) {
+                    user.password = password;
+                }
+                OrderService.userCache.put(id, user);
+                sendResponse(exchange, 200, user.toJson());
+                try {
+                    forwardRequest2(exchange, url1);
+                } catch (IOException | URISyntaxException e) {
+                    e.printStackTrace();
+                }
+                
             } else {
-                // User does not exist in cache
-            }
+                // If the don't
+                try {
+                    forwardRequest(exchange, url1);
+                } catch (IOException | URISyntaxException e) {
+                    e.printStackTrace();
+                }
+                    }
 
             // User updatedUser = userManager.updateUser(id, username, email, password);
             // if (updatedUser == null) {
@@ -410,6 +475,37 @@ class UserHandler implements HttpHandler {
             // sendResponse(exchange, 200, updatedUser.toResponseString(null));
         } catch (NumberFormatException e) {
             sendErrorResponse(exchange, 400, "");
+        }
+    }
+
+    private void handleDeleteUser(HttpExchange exchange, Map<String, String> requestData, String url1) throws IOException {
+        try {
+            int id = Integer.parseInt(requestData.get("id"));
+            String username = requestData.get("username");
+            String email = requestData.get("email");
+            String password = requestData.get("password");
+            if (OrderService.userCache.containsKey(id)) {
+                if (username == null || email == null || password == null) {
+                    sendErrorResponse(exchange, 400, "3");
+                    return;
+                }
+
+                sendResponse(exchange, 200, "");
+                try {
+                    forwardRequest2(exchange, url1);
+                } catch (IOException | URISyntaxException e) {
+                    e.printStackTrace();
+                }
+        } else {
+            try {
+                forwardRequest(exchange, url1);
+            } catch (IOException | URISyntaxException e) {
+                e.printStackTrace();
+                }
+            }
+        } catch (NumberFormatException e) {
+            sendErrorResponse(exchange, 400, "4");            
+        }   catch (Exception e) {
         }
     }
 
@@ -553,7 +649,7 @@ class UserHandler implements HttpHandler {
 
     private void sendErrorResponse(HttpExchange exchange, int statusCode, String errorMessage) throws IOException {
         // sendResponse(exchange, statusCode, "{\"error\":\"" + errorMessage + "\"}");
-        sendResponse(exchange, statusCode, "");
+        sendResponse(exchange, statusCode, errorMessage);
     }
 }
 

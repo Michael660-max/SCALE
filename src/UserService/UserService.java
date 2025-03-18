@@ -490,14 +490,14 @@ class UserHandler implements HttpHandler {
         String command = requestData.get("command");
 
         if (command == null) {
-            sendErrorResponse(exchange, 400, "");
+            sendErrorResponse(exchange, 400, "18");
             return;
         }
         switch (command) {
             case "create" -> handleCreateUser(exchange, requestData);
             case "update" -> handleUpdateUser(exchange, requestData); 
             case "delete" -> handleDeleteUser(exchange, requestData);
-            default -> sendErrorResponse(exchange, 400, "");
+            default -> sendErrorResponse(exchange, 400, "17");
         }
     }
 
@@ -506,7 +506,7 @@ class UserHandler implements HttpHandler {
         String[] segments = path.split("/");
         
         if (segments.length != 3) {
-            sendErrorResponse(exchange, 400, "");
+            sendErrorResponse(exchange, 400, "16");
             return;
         }
     
@@ -538,7 +538,7 @@ class UserHandler implements HttpHandler {
             
             
             if (username == null || email == null || !valid_email || password == null) {
-                sendErrorResponse(exchange, 400, "");
+                sendErrorResponse(exchange, 400, "12");
                 return;
             }
 
@@ -546,21 +546,21 @@ class UserHandler implements HttpHandler {
 
             if (userManager.getUser(id) != null) {
                 // sendErrorResponse(exchange, 400, "");
-                sendErrorResponse(exchange, 409, "");
+                sendErrorResponse(exchange, 409, "13");
                 return;
             }
             
             User createdUser = userManager.addUser(user);
             
             if (createdUser == null) {
-                sendErrorResponse(exchange, 400, "");
+                sendErrorResponse(exchange, 400, "14");
                 return;
             }
 
             sendResponse(exchange, 200, createdUser.toResponseString(null));
             // sendResponse(exchange, 200, createdUser.toResponseString("create"));
         } catch (NumberFormatException e) {
-            sendErrorResponse(exchange, 400, "");
+            sendErrorResponse(exchange, 400, "15");
         }
     }
 
@@ -573,13 +573,14 @@ class UserHandler implements HttpHandler {
 
             User updatedUser = userManager.updateUser(id, username, email, password);
             if (updatedUser == null) {
-                sendErrorResponse(exchange, 404, "");
+                sendErrorResponse(exchange, 404, "10");
                 return;
             }
+            
             sendResponse(exchange, 200, updatedUser.toResponseString(null));
             // sendResponse(exchange, 200, updatedUser.toResponseString("update"));
         } catch (NumberFormatException e) {
-            sendErrorResponse(exchange, 400, "");
+            sendErrorResponse(exchange, 400, "11");
         }
     }
 
@@ -591,18 +592,18 @@ class UserHandler implements HttpHandler {
             String password = requestData.get("password");
 
             if (username == null || email == null || password == null) {
-                sendErrorResponse(exchange, 400, "");
+                sendErrorResponse(exchange, 400, "7");
                 return;
             }
 
             if (!userManager.deleteUser(id, username, email, password)) {
-                sendErrorResponse(exchange, 404, "");
+                sendErrorResponse(exchange, 404, "8");
                 return;
             }
 
             sendResponse(exchange, 200, "");
         } catch (NumberFormatException e) {
-            sendErrorResponse(exchange, 400, "");
+            sendErrorResponse(exchange, 400, "9");
         }
     }
 
