@@ -4,5 +4,5 @@
         "src\\ProductService",
         "src\\UserService"
     ],
-    "java.project.referencedLibraries": []
+    "java.project.referencedLibraries": ["lib/**/*.jar"]
 }

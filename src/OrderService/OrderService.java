@@ -283,7 +283,7 @@ class UserInfo {
         sb.append("\"username\":\"").append(username).append("\",");
         sb.append("\"email\":\"").append(email).append("\",");
         // sb.append("\"password\":\"").append(password).append("\",");
-        sb.append("\"password\":\"").append(hashPassword(password)).append("\",");
+        // sb.append("\"password\":\"").append(hashPassword(password)).append("\",");
         // sb.append("\"purchasedProducts\":").append(convertMapToJson(purchasedProducts));
         sb.append("}");
         return sb.toString();

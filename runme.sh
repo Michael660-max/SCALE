@@ -33,15 +33,15 @@ compile() {
 # Start services
 start_user_service() {
     cd "$COMPILED_DIR/UserService"
-    java -cp ".:$LIB_DIR/sqlite-jdbc-3.49.1.0.jar:$LIB_DIR/*" UserService config.json
+    java -cp ".;$LIB_DIR/sqlite-jdbc-3.49.1.0.jar;$LIB_DIR/*" UserService config.json
 }
 
 start_product_service() {
-    cd "$COMPILED_DIR/ProductService" && java -cp ".:$LIB_DIR/*" ProductService config.json
+    cd "$COMPILED_DIR/ProductService" && java -cp ".;$LIB_DIR/*" ProductService config.json
 }
 
 start_order_service() {
-    cd "$COMPILED_DIR/OrderService" && java -cp ".:$LIB_DIR/*" OrderService config.json
+    cd "$COMPILED_DIR/OrderService" && java -cp ".;$LIB_DIR/*" OrderService config.json
 }
 
 start_workload() {
