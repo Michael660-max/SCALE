@@ -567,11 +567,6 @@ class UserHandler implements HttpHandler {
                     conn.addRequestProperty(key, value);
                 }
             });
-
-            // Ensure Content-Type is set if missing
-            if (!conn.getRequestProperties().containsKey("Content-Type")) {
-                conn.setRequestProperty("Content-Type", "application/json");
-            }
             
             // Forward request body if present (for POST requests)
             if ("POST".equalsIgnoreCase(exchange.getRequestMethod())) {
@@ -644,19 +639,14 @@ class UserHandler implements HttpHandler {
             
             // Get response from target server
             int responseCode = conn.getResponseCode();
-            InputStream responseBody = null;
+            InputStream responseBody;
             try {
-            // Forward response headers
-            conn.getHeaderFields().forEach((key, values) -> {
-                if (key != null) {  // Skip status line
-                    exchange.getResponseHeaders().put(key, values);
-                }
-            });
-
-            // Ensure Content-Type is set in the response if missing
-            if (!exchange.getResponseHeaders().containsKey("Content-Type")) {
-                exchange.getResponseHeaders().set("Content-Type", "application/json");
+                responseBody = conn.getInputStream();
+            } catch (IOException e) {
+                responseBody = conn.getErrorStream();
             }
+            
+            // Forward response headers
             conn.getHeaderFields().forEach((key, values) -> {
                 if (key != null) {  // Skip status line
                     exchange.getResponseHeaders().put(key, values);
@@ -679,7 +669,8 @@ class UserHandler implements HttpHandler {
         }
     }
 }
-}
+
+
 
 class ProductHandler implements HttpHandler {
     @Override
