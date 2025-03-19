@@ -11,6 +11,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.Executors;
 
 import org.bson.Document;
 
@@ -28,6 +29,7 @@ import com.mongodb.client.result.UpdateResult;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpHandler;
 import com.sun.net.httpserver.HttpServer;
+
 
 public class ProductService {
     private static int PORT;
@@ -127,7 +129,11 @@ public class ProductService {
         server.createContext("/product", new ProductHandler());
         server.createContext("/shutdown", new ShutdownHandler(server));
         server.createContext("/restart", new RestartHandler());
-        server.setExecutor(java.util.concurrent.Executors.newFixedThreadPool(10));
+        // server.setExecutor(java.util.concurrent.Executors.newFixedThreadPool(10));
+
+        int numProcessors = Runtime.getRuntime().availableProcessors();
+        server.setExecutor(Executors.newFixedThreadPool(numProcessors * 2)); // maybe 3?
+
         server.start();
 
         System.out.println("ProductService started on " + bindAddress + ":" + PORT);

@@ -14,6 +14,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.Executors;
 import java.util.regex.Pattern;
 
 import org.bson.Document;
@@ -159,7 +160,11 @@ public class UserService {
         server.createContext("/user", new UserHandler());
         server.createContext("/shutdown", new ShutdownHandler(server));
         server.createContext("/restart", new RestartHandler());
-        server.setExecutor(java.util.concurrent.Executors.newFixedThreadPool(10));
+        // server.setExecutor(java.util.concurrent.Executors.newFixedThreadPool(10));
+
+        int numProcessors = Runtime.getRuntime().availableProcessors();
+        server.setExecutor(Executors.newFixedThreadPool(numProcessors * 2)); // maybe 3?
+
         server.start();
 
         System.out.println("UserService started on " + bindAddress + ":" + PORT);

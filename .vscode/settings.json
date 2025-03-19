@@ -3,5 +3,6 @@
     "java.project.referencedLibraries": [
         "lib/MongoDB JDBC 2.2.2.jar",
         "lib/sqlite-jdbc-3.49.1.0.jar"
-    ]
+    ],
+    "java.compile.nullAnalysis.mode": "automatic"
 }
