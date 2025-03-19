@@ -434,7 +434,10 @@ class UserHandler implements HttpHandler {
         // sendResponse(exchange, 200, user.toJson());
 
         try {
-            forwardRequest(exchange, url1);
+            String userServiceUrl = String.format("http://%s:%s/user", 
+                OrderService.USER_SERVER_IP, 
+                OrderService.USER_SERVER_PORT);
+            forwardRequest(exchange, userServiceUrl);
         } catch (IOException | URISyntaxException e) {
             e.printStackTrace();
         }
