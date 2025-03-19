@@ -385,7 +385,8 @@ public class OrderService {
         }
 
         private String forwardRequest2(HttpExchange exchange, String targetUrl, String preReadBody) throws IOException, URISyntaxException {
-            StringBuilder responseBuilder = new StringBuilder();
+            // StringBuilder responseBuilder = new StringBuilder();
+            String responseBuilder = "";
             try {
                 // Create connection to target server
                 URI uri = new URI(targetUrl);
@@ -400,11 +401,14 @@ public class OrderService {
                     }
                 });
                 
-                // Forward request body if present (for POST requests)
+                // Forward request body if present
                 if ("POST".equalsIgnoreCase(exchange.getRequestMethod())) {
                     conn.setDoOutput(true);
-                    try (OutputStream os = conn.getOutputStream()) {
-                        exchange.getRequestBody().transferTo(os);
+                    if (preReadBody != null) {
+                        // Use the pre-read body
+                        try (OutputStream os = conn.getOutputStream()) {
+                            os.write(preReadBody.getBytes(StandardCharsets.UTF_8));
+                        }
                     }
                 }
                 
@@ -417,17 +421,13 @@ public class OrderService {
                     responseBody = conn.getErrorStream();
                 }
                 
-                // Read response into a string
-                try (BufferedReader reader = new BufferedReader(new InputStreamReader(responseBody, StandardCharsets.UTF_8))) {
-                    String line;
-                    while ((line = reader.readLine()) != null) {
-                        responseBuilder.append(line);
-                    }
-                }
-                
                 conn.disconnect();
             } catch (IOException e) {
-                responseBuilder.append("Error: ").append(e.getMessage());
+                String errorMessage = "" + e.getMessage();
+                exchange.sendResponseHeaders(500, errorMessage.length());
+                try (OutputStream os = exchange.getResponseBody()) {
+                    os.write(errorMessage.getBytes(StandardCharsets.UTF_8));
+                }
             }
             return responseBuilder.toString();
         }
