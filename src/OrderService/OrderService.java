@@ -282,11 +282,13 @@ class UserInfo {
         sb.append("\"id\":").append(id).append(",");
         sb.append("\"username\":\"").append(username).append("\",");
         sb.append("\"email\":\"").append(email).append("\",");
+        sb.append("\"password\":\"").append(hashPassword(password)).append("\"");
+        sb.append("}");
+        return sb.toString();
+
         // sb.append("\"password\":\"").append(password).append("\",");
         // sb.append("\"password\":\"").append(hashPassword(password)).append("\",");
         // sb.append("\"purchasedProducts\":").append(convertMapToJson(purchasedProducts));
-        sb.append("}");
-        return sb.toString();
     }
 
     private String convertMapToJson(Map<Integer, Integer> map) {
@@ -335,7 +337,7 @@ class UserHandler implements HttpHandler {
             if ("GET".equalsIgnoreCase(method)) {
                 handleGet(exchange);
             } else {
-                sendErrorResponse(exchange, 405, "");
+                sendErrorResponse(exchange, 405, "Invalid Request");
             }
         } else if ("POST".equalsIgnoreCase(method)) {
             // For create, update, delete commands.
@@ -373,7 +375,7 @@ class UserHandler implements HttpHandler {
         String[] segments = path.split("/");
         
         if (segments.length != 3) {
-            sendErrorResponse(exchange, 400, "6");
+            sendErrorResponse(exchange, 400, "Invalid request");
             return;
         }
         try {
@@ -382,9 +384,10 @@ class UserHandler implements HttpHandler {
                 UserInfo user = OrderService.userCache.get(id);
                 sendResponse(exchange, 200, user.toJson());
             } else {
-                // sendErrorResponse(exchange, 404, "User not found");
+                sendErrorResponse(exchange, 404, "User not found");
                 try {
-                    forwardRequest(exchange, String.format("http://%s:%s%s", OrderService.USER_SERVER_IP, OrderService.USER_SERVER_PORT, path));
+                    // sendResponse(exchange, 200, "{\"yello\": \"HERE\"}");
+                     forwardRequest(exchange, String.format("http://%s:%s%s", OrderService.USER_SERVER_IP, OrderService.USER_SERVER_PORT, path));
                 } catch (IOException | URISyntaxException e) {
                     e.printStackTrace();
                 }  
@@ -401,12 +404,12 @@ class UserHandler implements HttpHandler {
         String email = requestData.get("email");
         String password = requestData.get("password");
 
-        if (username == null || email == null || password == null) {
-            sendErrorResponse(exchange, 400, "1");
+        if (username == null || email == null || password == null || username == "" || email == "" || password == "") {
+            sendErrorResponse(exchange, 400, "");
             return;
         }
         if (OrderService.userCache.containsKey(id)) {
-            sendErrorResponse(exchange, 409, "2");
+            sendErrorResponse(exchange, 409, "");
             return;
         }
         
@@ -441,13 +444,13 @@ class UserHandler implements HttpHandler {
             if (OrderService.userCache.containsKey(id)) {
                 // User exists in cache
                 UserInfo user = OrderService.userCache.get(id);
-                if (username != null) {
+                if (username != null || username == "") {
                     user.username = username;
                 }
-                if (email != null) {
+                if (email != null || email == "") {
                     user.email = email;
                 }
-                if (password != null) {
+                if (password != null || password == "") {
                     user.password = password;
                 }
                 OrderService.userCache.put(id, user);
@@ -485,11 +488,11 @@ class UserHandler implements HttpHandler {
             String email = requestData.get("email");
             String password = requestData.get("password");
             if (OrderService.userCache.containsKey(id)) {
-                if (username == null || email == null || password == null) {
-                    sendErrorResponse(exchange, 400, "3");
+                if (username == null || email == null || password == null || username == "" || email == "" || password == "") {
+                    sendErrorResponse(exchange, 400, "");
                     return;
                 }
-
+                OrderService.userCache.remove(id);
                 sendResponse(exchange, 200, "");
                 try {
                     forwardRequest2(exchange, url1);
@@ -504,7 +507,7 @@ class UserHandler implements HttpHandler {
                 }
             }
         } catch (NumberFormatException e) {
-            sendErrorResponse(exchange, 400, "4");            
+            sendErrorResponse(exchange, 400, "");            
         }   catch (Exception e) {
         }
     }
@@ -999,13 +1002,13 @@ class OrderHandler implements HttpHandler {
 
             // Check for invalid inputs (-1)
             if (productId == -1 || userId == -1 || quantity == -1) {
-                sendErrorResponse(exchange, "Invalid Request");
+                sendErrorResponse(exchange, "Invalid Request 6 ");
                 return;
             }
     
             // Additional validation for positive values
             if (productId <= 0 || userId <= 0 || quantity <= 0) {
-                sendErrorResponse(exchange, "Invalid Request");
+                sendErrorResponse(exchange, "Invalid Request 7");
                 return;
             }
     
@@ -1013,17 +1016,21 @@ class OrderHandler implements HttpHandler {
             Product product = getProduct(productId);
             if (product == null) {
                 // System.out.println("NULL");
-                sendErrorResponse(exchange, "Invalid Request");
+                sendErrorResponse(exchange, "Invalid Request 1");
                 return;
             }
             if (product == null) {
-                sendErrorResponse(exchange, "Invalid Request");
+                sendErrorResponse(exchange, "Invalid Request 2");
                 return;
             }
     
             // Verify user exists
-            if (!checkUserExists(userId)) {
-                sendErrorResponse(exchange, "Invalid Request");
+            // if (!checkUserExists(userId)) {
+            //     sendErrorResponse(exchange, "Invalid Request 3");
+            //     return;
+            // }
+            if (OrderService.userCache.get(userId) == null){
+                sendErrorResponse(exchange, "Invalid Request 3");
                 return;
             }
     
@@ -1046,15 +1053,15 @@ class OrderHandler implements HttpHandler {
             );
     
             // Send update request to Product service
-            String productUrl = String.format("http://%s:%s/product",
-                OrderService.PRODUCT_SERVER_IP,
-                OrderService.PRODUCT_SERVER_PORT);
+            // String productUrl = String.format("http://%s:%s/product",
+            //     OrderService.PRODUCT_SERVER_IP,
+            //     OrderService.PRODUCT_SERVER_PORT);
             
-            String response = sendPostRequest(productUrl, updateJson);
-            if (response == null) {
-                sendErrorResponse(exchange, "Invalid Request");
-                return;
-            }
+            // String response = sendPostRequest(productUrl, updateJson);
+            // if (response == null) {
+            //     sendErrorResponse(exchange, "Invalid Request 4");
+            //     return;
+            // }
     
             // Update cache with new quantity
             product.setQuantity(newQuantity);
@@ -1069,17 +1076,19 @@ class OrderHandler implements HttpHandler {
             String purchaseJson = String.format("{\"product_id\":%d,\"quantity\":%d}", productId, quantity);
             String responseOrder = sendPostRequest(userServiceUrl, purchaseJson);
 
-            if (responseOrder == null) {
+            // if (responseOrder == null) {
 
-                sendErrorResponse(exchange, "Failed to update user purchase history");
-                return;
-            }
+            //     sendErrorResponse(exchange, "Failed to update user purchase history");
+            //     return;
+            // }
     
             // Send success response with order details
             sendSuccessResponse(exchange, order);
     
         } catch (Exception e) {
-            sendErrorResponse(exchange, "Invalid Request");
+            // System.out.println()
+            // e.printStackTrace();
+            sendErrorResponse(exchange, "Invalid Request 5");
         }
     }
     
