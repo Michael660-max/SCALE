@@ -431,10 +431,10 @@ class UserHandler implements HttpHandler {
         UserInfo user = new UserInfo(id, username, email, password);
         OrderService.userCache.put(id, user);        
         
-        sendResponse(exchange, 200, user.toJson());
-        
+        // sendResponse(exchange, 200, user.toJson());
+
         try {
-            forwardRequest2(exchange, url1);
+            forwardRequest(exchange, url1);
         } catch (IOException | URISyntaxException e) {
             e.printStackTrace();
         }
