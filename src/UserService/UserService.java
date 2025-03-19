@@ -291,7 +291,7 @@ class DatabaseManager {
     public static void initializeDatabase() {
         if (database == null) {
             try {
-                String mongoUri = "mongodb://mongoadmin:1234@localhost:27017";
+                String mongoUri = "mongodb://mongoadmin:1234@142.1.114.66:27017";
                 MongoClient mongoClient = MongoClients.create(mongoUri);
                 database = mongoClient.getDatabase("mydatabase");
                 System.out.println("MongoDB connected successfully on USER service!");

@@ -240,7 +240,7 @@ class DatabaseManager {
     public static void initializeDatabase() {
         if (database == null) {
             try {
-                String mongoUri = "mongodb://mongoadmin:1234@localhost:27017";
+                String mongoUri = "mongodb://mongoadmin:1234@142.1.114.66:27017";
                 MongoClient mongoClient = MongoClients.create(mongoUri);
                 database = mongoClient.getDatabase("mydatabase");
                 System.out.println("MongoDB connected successfully on PRODUCT service!");
@@ -315,8 +315,8 @@ class ProductManager {
         }
 
         UpdateResult result = collection.updateOne(Filters.eq("id", id), Updates.combine(
-                Updates.set("name", (name != null) ? name : existingProduct.getName()),
-                Updates.set("description", (description != null) ? description : existingProduct.getDescription()),
+                Updates.set("name", (name != null || !"".equals(name)) ? name : existingProduct.getName()),
+                Updates.set("description", (description != null || !"".equals(description)) ? description : existingProduct.getDescription()),
                 Updates.set("price", (price != null) ? price : existingProduct.getPrice()),
                 Updates.set("quantity", (quantity != null) ? quantity : existingProduct.getQuantity())));
 
@@ -453,8 +453,8 @@ class ProductHandler implements HttpHandler {
             int id = Integer.parseInt(requestData.get("id"));
             String name = requestData.get("name");
             String description = requestData.get("description");
-            Double price = requestData.containsKey("price") ? Double.parseDouble(requestData.get("price")) : null;
-            Integer quantity = requestData.containsKey("quantity") ? Integer.parseInt(requestData.get("quantity"))
+            Double price = requestData.containsKey("price") ? Double.valueOf(requestData.get("price")) : null;
+            Integer quantity = requestData.containsKey("quantity") ? Integer.valueOf(requestData.get("quantity"))
                     : null;
 
             if (price != null && price < 0 || quantity != null && quantity < 0) {
@@ -478,8 +478,8 @@ class ProductHandler implements HttpHandler {
         try {
             int id = Integer.parseInt(requestData.get("id"));
             String name = requestData.get("name");
-            Double price = requestData.containsKey("price") ? Double.parseDouble(requestData.get("price")) : null;
-            Integer quantity = requestData.containsKey("quantity") ? Integer.parseInt(requestData.get("quantity"))
+            Double price = requestData.containsKey("price") ? Double.valueOf(requestData.get("price")) : null;
+            Integer quantity = requestData.containsKey("quantity") ? Integer.valueOf(requestData.get("quantity"))
                     : null;
 
             if (name == null || !productManager.deleteProduct(id, name, price, quantity)) {

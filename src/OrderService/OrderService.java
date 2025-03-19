@@ -1,7 +1,9 @@
-import com.sun.net.httpserver.HttpExchange;
-import com.sun.net.httpserver.HttpHandler;
-import com.sun.net.httpserver.HttpServer;
-import java.io.*;
+import java.io.BufferedReader;
+import java.io.File;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.io.OutputStream;
 import java.net.HttpURLConnection;
 import java.net.InetSocketAddress;
 import java.net.URI;
@@ -10,28 +12,26 @@ import java.net.URL;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Paths;
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.List;
-import java.util.ArrayList;
 
 import org.bson.Document;
 
 import com.mongodb.ErrorCategory;
 import com.mongodb.MongoWriteException;
+import com.mongodb.client.FindIterable;
 import com.mongodb.client.MongoClient;
 import com.mongodb.client.MongoClients;
 import com.mongodb.client.MongoCollection;
 import com.mongodb.client.MongoDatabase;
 import com.mongodb.client.model.Filters;
-import com.mongodb.client.model.Updates;
-import com.mongodb.client.result.DeleteResult;
-import com.mongodb.client.result.InsertOneResult;
-import com.mongodb.client.result.UpdateResult;
-import org.bson.Document;
-import com.mongodb.client.FindIterable;
 import com.mongodb.client.model.Sorts;
+import com.sun.net.httpserver.HttpExchange;
+import com.sun.net.httpserver.HttpHandler;
+import com.sun.net.httpserver.HttpServer;
 
 public class OrderService {
     private static int PORT;
@@ -208,6 +208,7 @@ public class OrderService {
         }
     }
 
+    // TODOTODOTODO
     static {
         // Check if restart was the first command after startup
         File restartFlag = new File("restart_flag.txt");
@@ -459,10 +460,10 @@ class DatabaseManager {
     public static void initializeDatabase() {
         if (database == null) {
             try {
-                String mongoUri = "mongodb://mongoadmin:1234@localhost:27017";
+                String mongoUri = "mongodb://mongoadmin:1234@142.1.114.66:27017";
                 MongoClient mongoClient = MongoClients.create(mongoUri);
                 database = mongoClient.getDatabase("mydatabase");
-                System.out.println("MongoDB connected successfully on ORDER service!");
+                System.out.println("MongoDB connected successfully on PRODUCT service!");
             } catch (Exception e) {
                 System.err.println("Error connecting to MongoDB: " + e.getMessage());
             }
@@ -655,6 +656,10 @@ class OrderHandler implements HttpHandler {
                 sendErrorResponse(exchange, "Invalid Request");
                 return;
             }
+            if (product == null) {
+                sendErrorResponse(exchange, "Invalid Request");
+                return;
+            }
     
             // Verify user exists
             if (!checkUserExists(userId)) {
@@ -663,10 +668,10 @@ class OrderHandler implements HttpHandler {
             }
     
             // System.out.println("prodID: " + productId);
-            // System.out.println("quantity: " + product.getQuantity());
+            // System.out.println("quantity: " + getProductQuantity(productId));
             // System.out.println("cmdquantity: " + quantity);
             // Check if enough stock is available
-            if (product.getQuantity() < quantity) {
+            if (getProductQuantity(productId) < quantity) {
                 sendErrorResponse(exchange, "Exceeded quantity limit");
                 return;
             }
@@ -676,7 +681,7 @@ class OrderHandler implements HttpHandler {
             orderManager.addOrder(order);
     
             // Update product quantity
-            int newQuantity = product.getQuantity() - quantity;
+            int newQuantity = getProductQuantity(productId) - quantity;
             String updateJson = String.format(
                 "{\"command\":\"update\",\"id\":%d,\"quantity\":%d}",
                 productId, newQuantity
@@ -752,6 +757,7 @@ class OrderHandler implements HttpHandler {
         }
     }
 
+    // TODOTODOTODO
     private Product getProduct(int id) throws IOException, URISyntaxException  {
         MongoDatabase database = DatabaseManager.getDatabase();
         MongoCollection<Document> collection = database.getCollection("products");
@@ -770,6 +776,23 @@ class OrderHandler implements HttpHandler {
         }
     }
 
+    private int getProductQuantity(int id) throws IOException, URISyntaxException  {
+        MongoDatabase database = DatabaseManager.getDatabase();
+        MongoCollection<Document> collection = database.getCollection("products");
+
+        try {
+            Document foundProduct = collection.find(Filters.eq("id", id)).first();
+            if (foundProduct != null) {
+                return foundProduct.getInteger("quantity");
+            }
+            return -1;
+        } catch (Exception e) {
+            System.err.println("Error getting product quantity: " + e.getMessage());
+            return -1;
+        }
+    }
+
+    // TODOTODOTODO
     private boolean checkUserExists(int id) throws IOException, URISyntaxException {
         MongoDatabase database = DatabaseManager.getDatabase();
         MongoCollection<Document> collection = database.getCollection("users");
