@@ -37,8 +37,6 @@ import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpHandler;
 import com.sun.net.httpserver.HttpServer;
 
-import java.math.BigInteger;
-
 public class OrderService {
     private static int PORT;
     private static String IP;
@@ -224,6 +222,7 @@ public class OrderService {
         
         }
     }
+    
 
     // TODOTODOTODO
     static {
@@ -259,65 +258,64 @@ public class OrderService {
         }
     }}
 
-class UserInfo {
-    public int id;
-    public String username;
-    public String email;
-    public String password;
-    public Map<Integer, Integer> purchasedProducts = new HashMap<>();
-
-    public UserInfo(int id, String username, String email, String password) {
-        this.id = id;
-        this.username = username;
-        this.email = email;
-        this.password = password;
-    }
-
-    private String hashPassword(String password) {
-        try {
-            MessageDigest md = MessageDigest.getInstance("SHA-256");
-            byte[] hash = md.digest(password.getBytes(StandardCharsets.UTF_8));
-            BigInteger number = new BigInteger(1, hash);
-            return number.toString(16);
-        } catch (NoSuchAlgorithmException e) {
-            e.printStackTrace();
-            return "hash_error";
+    class UserInfo {
+        public int id;
+        public String username;
+        public String email;
+        public String password;
+        public Map<Integer, Integer> purchasedProducts = new HashMap<>();
+    
+        public UserInfo(int id, String username, String email, String password) {
+            this.id = id;
+            this.username = username;
+            this.email = email;
+            this.password = password;
         }
-    }
-
-    public String toJson() {
-        StringBuilder sb = new StringBuilder();
-        sb.append("{");
-        sb.append("\"id\":").append(id).append(",");
-        sb.append("\"username\":\"").append(username).append("\",");
-        sb.append("\"email\":\"").append(email).append("\",");
-        sb.append("\"password\":\"").append(hashPassword(password)).append("\"");
-        sb.append("}");
-        return sb.toString();
-
-        // sb.append("\"password\":\"").append(password).append("\",");
-        // sb.append("\"password\":\"").append(hashPassword(password)).append("\",");
-        // sb.append("\"purchasedProducts\":").append(convertMapToJson(purchasedProducts));
-    }
-
-    private String convertMapToJson(Map<Integer, Integer> map) {
-        StringBuilder sb = new StringBuilder();
-        sb.append("{");
-        boolean first = true;
-        for (Map.Entry<Integer, Integer> entry : map.entrySet()) {
-            if (!first) {
-                sb.append(",");
+    
+        private String hashPassword(String password) {
+            try {
+                MessageDigest md = MessageDigest.getInstance("SHA-256");
+                byte[] hash = md.digest(password.getBytes(StandardCharsets.UTF_8));
+                BigInteger number = new BigInteger(1, hash);
+                return number.toString(16);
+            } catch (NoSuchAlgorithmException e) {
+                e.printStackTrace();
+                return "hash_error";
             }
-            sb.append("\"").append(entry.getKey()).append("\":").append(entry.getValue());
-            first = false;
         }
-        sb.append("}");
-        return sb.toString();
+    
+        public String toJson() {
+            StringBuilder sb = new StringBuilder();
+            sb.append("{");
+            sb.append("\"id\":").append(id).append(",");
+            sb.append("\"username\":\"").append(username).append("\",");
+            sb.append("\"email\":\"").append(email).append("\",");
+            sb.append("\"password\":\"").append(hashPassword(password)).append("\"");
+            sb.append("}");
+            return sb.toString();
+    
+            // sb.append("\"password\":\"").append(password).append("\",");
+            // sb.append("\"password\":\"").append(hashPassword(password)).append("\",");
+            // sb.append("\"purchasedProducts\":").append(convertMapToJson(purchasedProducts));
+        }
+    
+        private String convertMapToJson(Map<Integer, Integer> map) {
+            StringBuilder sb = new StringBuilder();
+            sb.append("{");
+            boolean first = true;
+            for (Map.Entry<Integer, Integer> entry : map.entrySet()) {
+                if (!first) {
+                    sb.append(",");
+                }
+                sb.append("\"").append(entry.getKey()).append("\":").append(entry.getValue());
+                first = false;
+            }
+            sb.append("}");
+            return sb.toString();
+        }
     }
-}
 
 class UserHandler implements HttpHandler {
-    
     
     @Override
     public void handle(HttpExchange exchange) throws IOException {
@@ -401,7 +399,7 @@ class UserHandler implements HttpHandler {
                 UserInfo user = OrderService.userCache.get(id);
                 sendResponse(exchange, 200, user.toJson());
             } else {
-                sendErrorResponse(exchange, 404, "User not found");
+                // sendErrorResponse(exchange, 404, "User not found");
                 try {
                     // sendResponse(exchange, 200, "{\"yello\": \"HERE\"}");
                      forwardRequest(exchange, String.format("http://%s:%s%s", OrderService.USER_SERVER_IP, OrderService.USER_SERVER_PORT, path));
@@ -569,6 +567,11 @@ class UserHandler implements HttpHandler {
                     conn.addRequestProperty(key, value);
                 }
             });
+
+            // Ensure Content-Type is set if missing
+            if (!conn.getRequestProperties().containsKey("Content-Type")) {
+                conn.setRequestProperty("Content-Type", "application/json");
+            }
             
             // Forward request body if present (for POST requests)
             if ("POST".equalsIgnoreCase(exchange.getRequestMethod())) {
@@ -641,14 +644,19 @@ class UserHandler implements HttpHandler {
             
             // Get response from target server
             int responseCode = conn.getResponseCode();
-            InputStream responseBody;
+            InputStream responseBody = null;
             try {
-                responseBody = conn.getInputStream();
-            } catch (IOException e) {
-                responseBody = conn.getErrorStream();
-            }
-            
             // Forward response headers
+            conn.getHeaderFields().forEach((key, values) -> {
+                if (key != null) {  // Skip status line
+                    exchange.getResponseHeaders().put(key, values);
+                }
+            });
+
+            // Ensure Content-Type is set in the response if missing
+            if (!exchange.getResponseHeaders().containsKey("Content-Type")) {
+                exchange.getResponseHeaders().set("Content-Type", "application/json");
+            }
             conn.getHeaderFields().forEach((key, values) -> {
                 if (key != null) {  // Skip status line
                     exchange.getResponseHeaders().put(key, values);
@@ -670,6 +678,7 @@ class UserHandler implements HttpHandler {
             }
         }
     }
+}
 }
 
 class ProductHandler implements HttpHandler {
