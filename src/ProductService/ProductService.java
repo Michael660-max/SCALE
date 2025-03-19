@@ -463,7 +463,7 @@ class ProductHandler implements HttpHandler {
             Integer quantity = requestData.containsKey("quantity") ? Integer.valueOf(requestData.get("quantity"))
                     : null;
 
-            if (price != null && price < 0 || quantity != null && quantity < 0) {
+            if (price != null && price < 0 || quantity != null && quantity < 0 || description.equals("") || description == null) {
                 sendErrorResponse(exchange, 400, "");
                 return;
             }
