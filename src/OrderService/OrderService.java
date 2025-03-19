@@ -675,88 +675,363 @@ public class OrderService {
     }
 
 
-
-class ProductHandler implements HttpHandler {
-    @Override
-    public void handle(HttpExchange exchange) throws IOException {
-        String method = exchange.getRequestMethod();
-        
-        // Forward the request to the Product Server
-        String productServerUrl = String.format("http://%s:%s%s", 
-            OrderService.PRODUCT_SERVER_IP, 
-            OrderService.PRODUCT_SERVER_PORT, 
-            exchange.getRequestURI().getPath());
-        
-        if ("POST".equalsIgnoreCase(method) || "GET".equalsIgnoreCase(method)) {
-            try {
-                forwardRequest(exchange, productServerUrl);
-            } catch (IOException | URISyntaxException e) {
-                e.printStackTrace();
-            }
-        } else {
-            String errorMessage = "Method not supported";
-            exchange.sendResponseHeaders(405, errorMessage.length());
-            try (OutputStream os = exchange.getResponseBody()) {
-                os.write(errorMessage.getBytes(StandardCharsets.UTF_8));
+    class ProductHandler implements HttpHandler {
+        // Add a concurrent cache map similar to the userCache
+        public static Map<Integer, Product> productCache = new ConcurrentHashMap<>();
+    
+        @Override
+        public void handle(HttpExchange exchange) throws IOException {
+            String method = exchange.getRequestMethod();
+            String path = exchange.getRequestURI().getPath();
+    
+            // Route based on URL pattern
+            if (path.matches("/product/\\d+")) {
+                if ("GET".equalsIgnoreCase(method)) {
+                    handleGet(exchange);
+                } else {
+                    sendErrorResponse(exchange, 405, "Invalid Request");
+                }
+            } else if ("POST".equalsIgnoreCase(method)) {
+                // For create, update, delete commands
+                handlePost(exchange);
+            } else {
+                sendErrorResponse(exchange, 400, "Invalid Request");
             }
         }
-    }
-
-    private void forwardRequest(HttpExchange exchange, String targetUrl) throws IOException, URISyntaxException {
-        try {
-            // Create connection to target server
-            URI uri = new URI(targetUrl);
-            URL url = uri.toURL();
-            HttpURLConnection conn = (HttpURLConnection) url.openConnection();
-            conn.setRequestMethod(exchange.getRequestMethod());
+    
+        private void handleGet(HttpExchange exchange) throws IOException {
+            String path = exchange.getRequestURI().getPath();
+            String[] segments = path.split("/");
             
-            // Copy request headers
-            exchange.getRequestHeaders().forEach((key, values) -> {
-                for (String value : values) {
-                    conn.addRequestProperty(key, value);
-                }
-            });
-            
-            // Forward request body if present (for POST requests)
-            if ("POST".equalsIgnoreCase(exchange.getRequestMethod())) {
-                conn.setDoOutput(true);
-                try (OutputStream os = conn.getOutputStream()) {
-                    exchange.getRequestBody().transferTo(os);
-                }
+            if (segments.length != 3) {
+                sendErrorResponse(exchange, 400, "Invalid request");
+                return;
             }
             
-            // Get response from target server
-            int responseCode = conn.getResponseCode();
-            InputStream responseBody;
             try {
-                responseBody = conn.getInputStream();
+                int id = Integer.parseInt(segments[2]);
+                if (productCache.containsKey(id)) {
+                    Product product = productCache.get(id);
+                    sendResponse(exchange, 200, productToJson(product));
+                } else {
+                    try {
+                        forwardRequest(exchange, String.format("http://%s:%s%s", 
+                            OrderService.PRODUCT_SERVER_IP, 
+                            OrderService.PRODUCT_SERVER_PORT, 
+                            path), 
+                            null);
+                    } catch (IOException | URISyntaxException e) {
+                        e.printStackTrace();
+                    }  
+                }
+            } catch (NumberFormatException e) {
+                sendErrorResponse(exchange, 400, "Invalid product ID");
+            }
+        }
+    
+        private void handlePost(HttpExchange exchange) throws IOException {
+            String productServerUrl = String.format("http://%s:%s%s", 
+                OrderService.PRODUCT_SERVER_IP, 
+                OrderService.PRODUCT_SERVER_PORT, 
+                exchange.getRequestURI().getPath());
+    
+            // Read request body once and store it
+            String requestBody = getRequestBody(exchange);
+            Map<String, String> requestData = parseJsonToMap(requestBody);
+            String command = requestData.get("command");
+    
+            if (command == null) {
+                sendErrorResponse(exchange, 400, "Missing command");
+                return;
+            }
+            
+            switch (command) {
+                case "create":
+                    handleCreateProduct(exchange, requestData, productServerUrl, requestBody);
+                    break;
+                case "update":
+                    handleUpdateProduct(exchange, requestData, productServerUrl, requestBody);
+                    break;
+                case "delete":
+                    handleDeleteProduct(exchange, requestData, productServerUrl, requestBody);
+                    break;
+                default:
+                    sendErrorResponse(exchange, 400, "Unknown command");
+                    break;
+            }
+        }
+    
+        private void handleCreateProduct(HttpExchange exchange, Map<String, String> requestData, String url, String requestBody) throws IOException {
+            try {
+                int id = Integer.parseInt(requestData.get("id"));
+                String name = requestData.get("name");
+                String description = requestData.get("description");
+                double price = Double.parseDouble(requestData.get("price"));
+                int quantity = Integer.parseInt(requestData.get("quantity"));
+    
+                if (name == null || description == null || name.equals("") || description.equals("")) {
+                    sendErrorResponse(exchange, 400, "");
+                    return;
+                }
+                
+                if (productCache.containsKey(id)) {
+                    sendErrorResponse(exchange, 409, "");
+                    return;
+                }
+                
+                Product product = new Product(id, name, description, price, quantity);
+                productCache.put(id, product);   
+                sendResponse(exchange, 200, productToJson(product));
+                
+                try {
+                    String productServiceUrl = String.format("http://%s:%s/product", 
+                        OrderService.PRODUCT_SERVER_IP, 
+                        OrderService.PRODUCT_SERVER_PORT);
+                    forwardRequest2(exchange, productServiceUrl, requestBody);
+                } catch (IOException | URISyntaxException e) {
+                    e.printStackTrace();
+                }
+            } catch (Exception e) {
+                sendErrorResponse(exchange, 400, "Invalid Request");
+            }
+        }
+    
+        private void handleUpdateProduct(HttpExchange exchange, Map<String, String> requestData, String url, String requestBody) throws IOException {
+            try {
+                int id = Integer.parseInt(requestData.get("id"));
+                String name = requestData.get("name");
+                String description = requestData.get("description");
+                String priceStr = requestData.get("price");
+                String quantityStr = requestData.get("quantity");
+                
+                if (productCache.containsKey(id)) {
+                    // Product exists in cache
+                    Product product = productCache.get(id);
+                    if (name != null && !name.equals("")) {
+                        // Update name in our product object
+                        product.setName(name);
+                    }
+                    if (description != null && !description.equals("")) {
+                        // Update description in our product object
+                        product.setDescription(description);
+                    }
+                    if (priceStr != null && !priceStr.equals("")) {
+                        double price = Double.parseDouble(priceStr);
+                        // Update price in our product object
+                        double pric = Double.parseDouble(priceStr);
+                        product.setPrice(pric);
+                    }
+                    if (quantityStr != null && !quantityStr.equals("")) {
+                        int quantity = Integer.parseInt(quantityStr);
+                        product.setQuantity(quantity);
+                    }
+                    
+                    // Update cache
+                    productCache.put(id, product);
+                    sendResponse(exchange, 200, productToJson(product));
+    
+                    try {
+                        forwardRequest2(exchange, url, requestBody);
+                    } catch (IOException | URISyntaxException e) {
+                        e.printStackTrace();
+                        sendResponse(exchange, 200, productToJson(product));
+                    }
+                    
+                } else {
+                    // If the product doesn't exist in cache
+                    try {
+                        forwardRequest(exchange, url, requestBody);
+                    } catch (IOException | URISyntaxException e) {
+                        e.printStackTrace();
+                        sendErrorResponse(exchange, 404, "");
+                    }
+                }
+            } catch (NumberFormatException e) {
+                sendErrorResponse(exchange, 400, "");
+            }
+        }
+    
+        private void handleDeleteProduct(HttpExchange exchange, Map<String, String> requestData, String url, String requestBody) throws IOException {
+            try {
+                int id = Integer.parseInt(requestData.get("id"));
+                
+                if (productCache.containsKey(id)) {
+                    productCache.remove(id);
+                    sendResponse(exchange, 200, "");
+    
+                    try {
+                        forwardRequest2(exchange, url, requestBody);
+                    } catch (IOException | URISyntaxException e) {
+                        e.printStackTrace();
+                        sendResponse(exchange, 200, "");
+                    }
+                } else {
+                    try {
+                        forwardRequest(exchange, url, requestBody);
+                    } catch (IOException | URISyntaxException e) {
+                        e.printStackTrace();
+                        sendErrorResponse(exchange, 404, "");
+                    }
+                }
+            } catch (NumberFormatException e) {
+                sendErrorResponse(exchange, 400, "");            
+            } catch (Exception e) {
+                sendErrorResponse(exchange, 500, "Server error");
+            }
+        }
+    
+        private Map<String, String> parseJsonToMap(String json) {
+            Map<String, String> map = new HashMap<>();
+            json = json.replaceAll("[{}\"]", "");
+            String[] pairs = json.split(",");
+            for (String pair : pairs) {
+                String[] keyValue = pair.split(":");
+                if (keyValue.length == 2) {
+                    map.put(keyValue[0].trim(), keyValue[1].trim());
+                }
+            }
+            return map;
+        }
+    
+        private String getRequestBody(HttpExchange exchange) throws IOException {
+            try (BufferedReader reader = new BufferedReader(
+                    new InputStreamReader(exchange.getRequestBody(), StandardCharsets.UTF_8))) {
+                StringBuilder sb = new StringBuilder();
+                String line;
+                while ((line = reader.readLine()) != null) {
+                    sb.append(line);
+                }
+                return sb.toString();
+            }
+        }
+    
+        private String productToJson(Product product) {
+            return String.format(
+                "{\"id\":%d,\"name\":\"%s\",\"description\":\"%s\",\"price\":%.2f,\"quantity\":%d}",
+                product.getId(), product.getName(), product.getDescription(), product.getPrice(), product.getQuantity()
+            );
+        }
+    
+        // Forward request with pre-read body
+        private void forwardRequest(HttpExchange exchange, String targetUrl, String preReadBody) throws IOException, URISyntaxException {
+            try {
+                URI uri = new URI(targetUrl);
+                URL url = uri.toURL();
+                HttpURLConnection conn = (HttpURLConnection) url.openConnection();
+                conn.setRequestMethod(exchange.getRequestMethod());
+                
+                // Copy request headers
+                exchange.getRequestHeaders().forEach((key, values) -> {
+                    for (String value : values) {
+                        conn.addRequestProperty(key, value);
+                    }
+                });
+                
+                // Forward request body if present
+                if ("POST".equalsIgnoreCase(exchange.getRequestMethod())) {
+                    conn.setDoOutput(true);
+                    if (preReadBody != null) {
+                        // Use the pre-read body
+                        try (OutputStream os = conn.getOutputStream()) {
+                            os.write(preReadBody.getBytes(StandardCharsets.UTF_8));
+                        }
+                    }
+                }
+                
+                // Get response from target server
+                int responseCode = conn.getResponseCode();
+                InputStream responseBody;
+                try {
+                    responseBody = conn.getInputStream();
+                } catch (IOException e) {
+                    responseBody = conn.getErrorStream();
+                }
+                
+                // Forward response headers
+                conn.getHeaderFields().forEach((key, values) -> {
+                    if (key != null) {  // Skip status line
+                        exchange.getResponseHeaders().put(key, values);
+                    }
+                });
+                
+                // Forward response to client
+                exchange.sendResponseHeaders(responseCode, 0);
+                try (OutputStream os = exchange.getResponseBody()) {
+                    responseBody.transferTo(os);
+                }
+                
+                conn.disconnect();
             } catch (IOException e) {
-                responseBody = conn.getErrorStream();
-            }
-            
-            // Forward response headers
-            conn.getHeaderFields().forEach((key, values) -> {
-                if (key != null) {  // Skip status line
-                    exchange.getResponseHeaders().put(key, values);
+                String errorMessage = "" + e.getMessage();
+                exchange.sendResponseHeaders(500, errorMessage.length());
+                try (OutputStream os = exchange.getResponseBody()) {
+                    os.write(errorMessage.getBytes(StandardCharsets.UTF_8));
                 }
-            });
-            
-            // Forward response to client
-            exchange.sendResponseHeaders(responseCode, 0);
-            try (OutputStream os = exchange.getResponseBody()) {
-                responseBody.transferTo(os);
-            }
-            
-            conn.disconnect();
-        } catch (IOException e) {
-            String errorMessage = "" + e.getMessage();
-            exchange.sendResponseHeaders(500, errorMessage.length());
-            try (OutputStream os = exchange.getResponseBody()) {
-                os.write(errorMessage.getBytes(StandardCharsets.UTF_8));
             }
         }
+    
+        // Forward request without capturing response
+        private String forwardRequest2(HttpExchange exchange, String targetUrl, String preReadBody) throws IOException, URISyntaxException {
+            String responseBuilder = "";
+            try {
+                // Create connection to target server
+                URI uri = new URI(targetUrl);
+                URL url = uri.toURL();
+                HttpURLConnection conn = (HttpURLConnection) url.openConnection();
+                conn.setRequestMethod(exchange.getRequestMethod());
+                
+                // Copy request headers
+                exchange.getRequestHeaders().forEach((key, values) -> {
+                    for (String value : values) {
+                        conn.addRequestProperty(key, value);
+                    }
+                });
+                
+                // Forward request body if present
+                if ("POST".equalsIgnoreCase(exchange.getRequestMethod())) {
+                    conn.setDoOutput(true);
+                    if (preReadBody != null) {
+                        // Use the pre-read body
+                        try (OutputStream os = conn.getOutputStream()) {
+                            os.write(preReadBody.getBytes(StandardCharsets.UTF_8));
+                        }
+                    }
+                }
+                
+                // Get response from target server
+                int responseCode = conn.getResponseCode();
+                InputStream responseBody;
+                try {
+                    responseBody = conn.getInputStream();
+                } catch (IOException e) {
+                    responseBody = conn.getErrorStream();
+                }
+                
+                conn.disconnect();
+            } catch (IOException e) {
+                String errorMessage = "" + e.getMessage();
+                exchange.sendResponseHeaders(500, errorMessage.length());
+                try (OutputStream os = exchange.getResponseBody()) {
+                    os.write(errorMessage.getBytes(StandardCharsets.UTF_8));
+                }
+            }
+            return responseBuilder.toString();
+        }
+    
+        private void sendResponse(HttpExchange exchange, int statusCode, String response) throws IOException {
+            exchange.getResponseHeaders().set("Content-Type", "application/json");
+            byte[] responseBytes = response.getBytes(StandardCharsets.UTF_8);
+            exchange.sendResponseHeaders(statusCode, responseBytes.length);
+            try (OutputStream os = exchange.getResponseBody()) {
+                os.write(responseBytes);
+            }
+        }
+    
+        private void sendErrorResponse(HttpExchange exchange, int statusCode, String errorMessage) throws IOException {
+            sendResponse(exchange, statusCode, errorMessage);
+        }
     }
-}
+
 
 class Product {
     private int id;
@@ -777,6 +1052,10 @@ class Product {
     public String getName() { return name; }
     public int getQuantity() { return quantity; }
     public void setQuantity(int quantity) { this.quantity = quantity; }
+    public void setName(String name) { this.name = name; }
+    public void setPrice(double price) { this.price = price; }
+    public void setDescription(String desc) { this.description = desc; }
+
 
     public static Product fromJson(String json) {
         Map<String, String> map = parseJsonToMap(json);
