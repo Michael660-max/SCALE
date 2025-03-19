@@ -316,7 +316,6 @@ public class OrderService {
     }
 
     class UserHandler implements HttpHandler {
-    
         @Override
         public void handle(HttpExchange exchange) throws IOException {
             String method = exchange.getRequestMethod();
@@ -384,6 +383,54 @@ public class OrderService {
                     break;
             }
         }
+
+        private String forwardRequest2(HttpExchange exchange, String targetUrl, String preReadBody) throws IOException, URISyntaxException {
+            StringBuilder responseBuilder = new StringBuilder();
+            try {
+                // Create connection to target server
+                URI uri = new URI(targetUrl);
+                URL url = uri.toURL();
+                HttpURLConnection conn = (HttpURLConnection) url.openConnection();
+                conn.setRequestMethod(exchange.getRequestMethod());
+                
+                // Copy request headers
+                exchange.getRequestHeaders().forEach((key, values) -> {
+                    for (String value : values) {
+                        conn.addRequestProperty(key, value);
+                    }
+                });
+                
+                // Forward request body if present (for POST requests)
+                if ("POST".equalsIgnoreCase(exchange.getRequestMethod())) {
+                    conn.setDoOutput(true);
+                    try (OutputStream os = conn.getOutputStream()) {
+                        exchange.getRequestBody().transferTo(os);
+                    }
+                }
+                
+                // Get response from target server
+                int responseCode = conn.getResponseCode();
+                InputStream responseBody;
+                try {
+                    responseBody = conn.getInputStream();
+                } catch (IOException e) {
+                    responseBody = conn.getErrorStream();
+                }
+                
+                // Read response into a string
+                try (BufferedReader reader = new BufferedReader(new InputStreamReader(responseBody, StandardCharsets.UTF_8))) {
+                    String line;
+                    while ((line = reader.readLine()) != null) {
+                        responseBuilder.append(line);
+                    }
+                }
+                
+                conn.disconnect();
+            } catch (IOException e) {
+                responseBuilder.append("Error: ").append(e.getMessage());
+            }
+            return responseBuilder.toString();
+        }
     
         private void handleGet(HttpExchange exchange) throws IOException {
             String path = exchange.getRequestURI().getPath();
@@ -431,13 +478,15 @@ public class OrderService {
                 }
                 
                 UserInfo user = new UserInfo(id, username, email, password);
-                OrderService.userCache.put(id, user);        
+                OrderService.userCache.put(id, user);   
+                sendResponse(exchange, 200, user.toJson());
+     
                 
                 try {
                     String userServiceUrl = String.format("http://%s:%s/user", 
                         OrderService.USER_SERVER_IP, 
                         OrderService.USER_SERVER_PORT);
-                    forwardRequest(exchange, userServiceUrl, requestBody);
+                    forwardRequest2(exchange, userServiceUrl, requestBody);
                 } catch (IOException | URISyntaxException e) {
                     e.printStackTrace();
                 }
@@ -466,9 +515,10 @@ public class OrderService {
                         user.password = password;
                     }
                     OrderService.userCache.put(id, user);
-                    
+                    sendResponse(exchange, 200, user.toJson());
+
                     try {
-                        forwardRequest(exchange, url, requestBody);
+                        forwardRequest2(exchange, url, requestBody);
                     } catch (IOException | URISyntaxException e) {
                         e.printStackTrace();
                         sendResponse(exchange, 200, user.toJson());
@@ -502,9 +552,10 @@ public class OrderService {
                         return;
                     }
                     OrderService.userCache.remove(id);
-                    
+                    sendResponse(exchange, 200, user.toJson());
+
                     try {
-                        forwardRequest(exchange, url, requestBody);
+                        forwardRequest2(exchange, url, requestBody);
                     } catch (IOException | URISyntaxException e) {
                         e.printStackTrace();
                         sendResponse(exchange, 200, "");
