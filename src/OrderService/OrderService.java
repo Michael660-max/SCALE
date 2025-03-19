@@ -4,6 +4,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.OutputStream;
+import java.math.BigInteger;
 import java.net.HttpURLConnection;
 import java.net.InetSocketAddress;
 import java.net.URI;
@@ -12,15 +13,14 @@ import java.net.URL;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Paths;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executors;
-
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
 
 import org.bson.Document;
 
@@ -552,7 +552,8 @@ public class OrderService {
                         return;
                     }
                     OrderService.userCache.remove(id);
-                    sendResponse(exchange, 200, user.toJson());
+
+                    sendResponse(exchange, 200, "");
 
                     try {
                         forwardRequest2(exchange, url, requestBody);
