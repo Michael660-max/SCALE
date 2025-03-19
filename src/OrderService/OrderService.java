@@ -315,363 +315,312 @@ public class OrderService {
         }
     }
 
-class UserHandler implements HttpHandler {
+    class UserHandler implements HttpHandler {
     
-    @Override
-    public void handle(HttpExchange exchange) throws IOException {
-        String method = exchange.getRequestMethod();
-        String path = exchange.getRequestURI().getPath();
-
-        String userServerUrl = String.format("http://%s:%s%s", 
-            OrderService.USER_SERVER_IP, 
-            OrderService.USER_SERVER_PORT, 
-            exchange.getRequestURI().getPath());
-
-        // Route based on URL pattern.
-        if (path.matches("/user/\\d+/purchase")) {
-            try {
-                forwardRequest(exchange, userServerUrl);
-            } catch (IOException | URISyntaxException e) {
-                e.printStackTrace();
-            }
-        } else if (path.matches("/user/purchased/\\d+")) {
-            try {
-                forwardRequest(exchange, userServerUrl);
-            } catch (IOException | URISyntaxException e) {
-                e.printStackTrace();
-            }
-        } else if (path.matches("/user/\\d+")) {
-            if ("GET".equalsIgnoreCase(method)) {
-                handleGet(exchange);
-            } else {
-                sendErrorResponse(exchange, 405, "Invalid Request");
-            }
-        } else if ("POST".equalsIgnoreCase(method)) {
-            // For create, update, delete commands.
-            handlePost(exchange);
-        } else {
-            sendErrorResponse(exchange, 400, "Invalid Request");
-        }
-    }
-
-    private void handlePost(HttpExchange exchange) throws IOException {
-
-        String userServerUrl = String.format("http://%s:%s%s", 
-            OrderService.USER_SERVER_IP, 
-            OrderService.USER_SERVER_PORT, 
-            exchange.getRequestURI().getPath());
-
-        String requestBody = getRequestBody(exchange);
-        Map<String, String> requestData = parseJsonToMap(requestBody);
-        String command = requestData.get("command");
-
-        if (command == null) {
-            sendErrorResponse(exchange, 400, "Missing command");
-            return;
-        }
-        switch (command) {
-            case "create":
-                handleCreateUser(exchange, requestData, userServerUrl);
-                break;
-            case "update":
-                handleUpdateUser(exchange, requestData, userServerUrl);
-                break;
-            case "delete":
-                handleDeleteUser(exchange, requestData, userServerUrl);
-                break;
-            default:
-                sendErrorResponse(exchange, 400, "Unknown command");
-                break;
-        }
-    }
-
-    private void handleGet(HttpExchange exchange) throws IOException {
-        String path = exchange.getRequestURI().getPath();
-        String[] segments = path.split("/");
-        
-        if (segments.length != 3) {
-            sendErrorResponse(exchange, 400, "Invalid request");
-            return;
-        }
-        try {
-            int id = Integer.parseInt(segments[2]);
-            if (OrderService.userCache.containsKey(id)) {
-                UserInfo user = OrderService.userCache.get(id);
-                sendResponse(exchange, 200, user.toJson());
-            } else {
-                // sendErrorResponse(exchange, 404, "User not found");
-                try {
-                    // sendResponse(exchange, 200, "{\"yello\": \"HERE\"}");
-                     forwardRequest(exchange, String.format("http://%s:%s%s", OrderService.USER_SERVER_IP, OrderService.USER_SERVER_PORT, path));
-                } catch (IOException | URISyntaxException e) {
-                    e.printStackTrace();
-                }  
-        }} catch (NumberFormatException e) {
-            sendErrorResponse(exchange, 400, "Invalid user ID");
-    }
-    }
-
-    private void handleCreateUser(HttpExchange exchange, Map<String, String> requestData, String url1) throws IOException {
-        try {
-            
-        int id = Integer.parseInt(requestData.get("id"));
-        String username = requestData.get("username");
-        String email = requestData.get("email");
-        String password = requestData.get("password");
-
-        if (username == null || email == null || password == null || username == "" || email == "" || password == "") {
-            sendErrorResponse(exchange, 400, "");
-            return;
-        }
-        if (OrderService.userCache.containsKey(id)) {
-            sendErrorResponse(exchange, 409, "");
-            return;
-        }
-        
-        UserInfo user = new UserInfo(id, username, email, password);
-        OrderService.userCache.put(id, user);        
-        
-        // sendResponse(exchange, 200, user.toJson());
-
-        try {
-            String userServiceUrl = String.format("http://%s:%s/user", 
+        @Override
+        public void handle(HttpExchange exchange) throws IOException {
+            String method = exchange.getRequestMethod();
+            String path = exchange.getRequestURI().getPath();
+    
+            String userServerUrl = String.format("http://%s:%s%s", 
                 OrderService.USER_SERVER_IP, 
-                OrderService.USER_SERVER_PORT);
-            forwardRequest(exchange, userServiceUrl);
-        } catch (IOException | URISyntaxException e) {
-            e.printStackTrace();
-        }
-        
-        //String requestBody = getRequestBody(exchange);
-        //String targetUrl = String.format("http://%s:%s/user", OrderService.USER_SERVER_IP, OrderService.USER_SERVER_PORT);
-        //forwardRequest(exchange, url1);
-        // updateCacheFromResponse(response);
-        // sendResponse(exchange, 200, response);
-        } catch (Exception e) {
-            sendErrorResponse(exchange, 400, "Invalid Request");
-        }
-    }
-
-    private void handleUpdateUser(HttpExchange exchange, Map<String, String> requestData, String url1) throws IOException {
-        try {
-            int id = Integer.parseInt(requestData.get("id"));
-            String username = requestData.get("username");
-            String email = requestData.get("email");
-            String password = requestData.get("password");
-
-            if (OrderService.userCache.containsKey(id)) {
-                // User exists in cache
-                UserInfo user = OrderService.userCache.get(id);
-                if (username != null || username == "") {
-                    user.username = username;
-                }
-                if (email != null || email == "") {
-                    user.email = email;
-                }
-                if (password != null || password == "") {
-                    user.password = password;
-                }
-                OrderService.userCache.put(id, user);
-                sendResponse(exchange, 200, user.toJson());
+                OrderService.USER_SERVER_PORT, 
+                exchange.getRequestURI().getPath());
+    
+            // Route based on URL pattern.
+            if (path.matches("/user/\\d+/purchase")) {
                 try {
-                    forwardRequest2(exchange, url1);
+                    forwardRequest(exchange, userServerUrl, null);
                 } catch (IOException | URISyntaxException e) {
                     e.printStackTrace();
                 }
-                
+            } else if (path.matches("/user/purchased/\\d+")) {
+                try {
+                    forwardRequest(exchange, userServerUrl, null);
+                } catch (IOException | URISyntaxException e) {
+                    e.printStackTrace();
+                }
+            } else if (path.matches("/user/\\d+")) {
+                if ("GET".equalsIgnoreCase(method)) {
+                    handleGet(exchange);
+                } else {
+                    sendErrorResponse(exchange, 405, "Invalid Request");
+                }
+            } else if ("POST".equalsIgnoreCase(method)) {
+                // For create, update, delete commands.
+                handlePost(exchange);
             } else {
-                // If the don't
-                try {
-                    forwardRequest(exchange, url1);
-                } catch (IOException | URISyntaxException e) {
-                    e.printStackTrace();
-                }
-                    }
-
-            // User updatedUser = userManager.updateUser(id, username, email, password);
-            // if (updatedUser == null) {
-            //     sendErrorResponse(exchange, 404, "");
-            //     return;
-            // }
-            // sendResponse(exchange, 200, updatedUser.toResponseString(null));
-        } catch (NumberFormatException e) {
-            sendErrorResponse(exchange, 400, "");
+                sendErrorResponse(exchange, 400, "Invalid Request");
+            }
         }
-    }
-
-    private void handleDeleteUser(HttpExchange exchange, Map<String, String> requestData, String url1) throws IOException {
-        try {
-            int id = Integer.parseInt(requestData.get("id"));
-            String username = requestData.get("username");
-            String email = requestData.get("email");
-            String password = requestData.get("password");
-            if (OrderService.userCache.containsKey(id)) {
-                if (username == null || email == null || password == null || username == "" || email == "" || password == "") {
+    
+        private void handlePost(HttpExchange exchange) throws IOException {
+            String userServerUrl = String.format("http://%s:%s%s", 
+                OrderService.USER_SERVER_IP, 
+                OrderService.USER_SERVER_PORT, 
+                exchange.getRequestURI().getPath());
+    
+            // Read request body once and store it
+            String requestBody = getRequestBody(exchange);
+            Map<String, String> requestData = parseJsonToMap(requestBody);
+            String command = requestData.get("command");
+    
+            if (command == null) {
+                sendErrorResponse(exchange, 400, "Missing command");
+                return;
+            }
+            switch (command) {
+                case "create":
+                    handleCreateUser(exchange, requestData, userServerUrl, requestBody);
+                    break;
+                case "update":
+                    handleUpdateUser(exchange, requestData, userServerUrl, requestBody);
+                    break;
+                case "delete":
+                    handleDeleteUser(exchange, requestData, userServerUrl, requestBody);
+                    break;
+                default:
+                    sendErrorResponse(exchange, 400, "Unknown command");
+                    break;
+            }
+        }
+    
+        private void handleGet(HttpExchange exchange) throws IOException {
+            String path = exchange.getRequestURI().getPath();
+            String[] segments = path.split("/");
+            
+            if (segments.length != 3) {
+                sendErrorResponse(exchange, 400, "Invalid request");
+                return;
+            }
+            try {
+                int id = Integer.parseInt(segments[2]);
+                if (OrderService.userCache.containsKey(id)) {
+                    UserInfo user = OrderService.userCache.get(id);
+                    sendResponse(exchange, 200, user.toJson());
+                } else {
+                    try {
+                        forwardRequest(exchange, String.format("http://%s:%s%s", 
+                            OrderService.USER_SERVER_IP, 
+                            OrderService.USER_SERVER_PORT, 
+                            path), 
+                            null);
+                    } catch (IOException | URISyntaxException e) {
+                        e.printStackTrace();
+                    }  
+                }
+            } catch (NumberFormatException e) {
+                sendErrorResponse(exchange, 400, "Invalid user ID");
+            }
+        }
+    
+        private void handleCreateUser(HttpExchange exchange, Map<String, String> requestData, String url, String requestBody) throws IOException {
+            try {
+                int id = Integer.parseInt(requestData.get("id"));
+                String username = requestData.get("username");
+                String email = requestData.get("email");
+                String password = requestData.get("password");
+    
+                if (username == null || email == null || password == null || username.equals("") || email.equals("") || password.equals("")) {
                     sendErrorResponse(exchange, 400, "");
                     return;
                 }
-                OrderService.userCache.remove(id);
-                sendResponse(exchange, 200, "");
+                if (OrderService.userCache.containsKey(id)) {
+                    sendErrorResponse(exchange, 409, "");
+                    return;
+                }
+                
+                UserInfo user = new UserInfo(id, username, email, password);
+                OrderService.userCache.put(id, user);        
+                
                 try {
-                    forwardRequest2(exchange, url1);
+                    String userServiceUrl = String.format("http://%s:%s/user", 
+                        OrderService.USER_SERVER_IP, 
+                        OrderService.USER_SERVER_PORT);
+                    forwardRequest(exchange, userServiceUrl, requestBody);
                 } catch (IOException | URISyntaxException e) {
                     e.printStackTrace();
                 }
-        } else {
+            } catch (Exception e) {
+                sendErrorResponse(exchange, 400, "Invalid Request");
+            }
+        }
+    
+        private void handleUpdateUser(HttpExchange exchange, Map<String, String> requestData, String url, String requestBody) throws IOException {
             try {
-                forwardRequest(exchange, url1);
-            } catch (IOException | URISyntaxException e) {
-                e.printStackTrace();
+                int id = Integer.parseInt(requestData.get("id"));
+                String username = requestData.get("username");
+                String email = requestData.get("email");
+                String password = requestData.get("password");
+    
+                if (OrderService.userCache.containsKey(id)) {
+                    // User exists in cache
+                    UserInfo user = OrderService.userCache.get(id);
+                    if (username != null && !username.equals("")) {
+                        user.username = username;
+                    }
+                    if (email != null && !email.equals("")) {
+                        user.email = email;
+                    }
+                    if (password != null && !password.equals("")) {
+                        user.password = password;
+                    }
+                    OrderService.userCache.put(id, user);
+                    
+                    try {
+                        forwardRequest(exchange, url, requestBody);
+                    } catch (IOException | URISyntaxException e) {
+                        e.printStackTrace();
+                        sendResponse(exchange, 200, user.toJson());
+                    }
+                    
+                } else {
+                    // If the user doesn't exist in cache
+                    try {
+                        forwardRequest(exchange, url, requestBody);
+                    } catch (IOException | URISyntaxException e) {
+                        e.printStackTrace();
+                        sendErrorResponse(exchange, 404, "");
+                    }
                 }
-            }
-        } catch (NumberFormatException e) {
-            sendErrorResponse(exchange, 400, "");            
-        }   catch (Exception e) {
-        }
-    }
-
-    private Map<String, String> parseJsonToMap(String json) {
-        Map<String, String> map = new HashMap<>();
-        json = json.replaceAll("[{}\"]", "");
-        String[] pairs = json.split(",");
-        for (String pair : pairs) {
-            String[] keyValue = pair.split(":");
-            if (keyValue.length == 2) {
-                map.put(keyValue[0].trim(), keyValue[1].trim());
+            } catch (NumberFormatException e) {
+                sendErrorResponse(exchange, 400, "");
             }
         }
-        return map;
-    }
-
-    private String  getRequestBody(HttpExchange exchange) throws IOException {
-        try (BufferedReader reader = new BufferedReader(
-                new InputStreamReader(exchange.getRequestBody(), StandardCharsets.UTF_8))) {
-            StringBuilder sb = new StringBuilder();
-            String line;
-            while ((line = reader.readLine()) != null) {
-                sb.append(line);
-            }
-            return sb.toString();
-        }
-    }
-
-    private String forwardRequest2(HttpExchange exchange, String targetUrl) throws IOException, URISyntaxException {
-        StringBuilder responseBuilder = new StringBuilder();
-        try {
-            // Create connection to target server
-            URI uri = new URI(targetUrl);
-            URL url = uri.toURL();
-            HttpURLConnection conn = (HttpURLConnection) url.openConnection();
-            conn.setRequestMethod(exchange.getRequestMethod());
-            
-            // Copy request headers
-            exchange.getRequestHeaders().forEach((key, values) -> {
-                for (String value : values) {
-                    conn.addRequestProperty(key, value);
-                }
-            });
-            
-            // Forward request body if present (for POST requests)
-            if ("POST".equalsIgnoreCase(exchange.getRequestMethod())) {
-                conn.setDoOutput(true);
-                try (OutputStream os = conn.getOutputStream()) {
-                    exchange.getRequestBody().transferTo(os);
-                }
-            }
-            
-            // Get response from target server
-            int responseCode = conn.getResponseCode();
-            InputStream responseBody;
+    
+        private void handleDeleteUser(HttpExchange exchange, Map<String, String> requestData, String url, String requestBody) throws IOException {
             try {
-                responseBody = conn.getInputStream();
-            } catch (IOException e) {
-                responseBody = conn.getErrorStream();
+                int id = Integer.parseInt(requestData.get("id"));
+                String username = requestData.get("username");
+                String email = requestData.get("email");
+                String password = requestData.get("password");
+                
+                if (OrderService.userCache.containsKey(id)) {
+                    if (username == null || email == null || password == null || 
+                        username.equals("") || email.equals("") || password.equals("")) {
+                        sendErrorResponse(exchange, 400, "");
+                        return;
+                    }
+                    OrderService.userCache.remove(id);
+                    
+                    try {
+                        forwardRequest(exchange, url, requestBody);
+                    } catch (IOException | URISyntaxException e) {
+                        e.printStackTrace();
+                        sendResponse(exchange, 200, "");
+                    }
+                } else {
+                    try {
+                        forwardRequest(exchange, url, requestBody);
+                    } catch (IOException | URISyntaxException e) {
+                        e.printStackTrace();
+                        sendErrorResponse(exchange, 404, "");
+                    }
+                }
+            } catch (NumberFormatException e) {
+                sendErrorResponse(exchange, 400, "");            
+            } catch (Exception e) {
+                sendErrorResponse(exchange, 500, "Server error");
             }
-            
-            // Read response into a string
-            try (BufferedReader reader = new BufferedReader(new InputStreamReader(responseBody, StandardCharsets.UTF_8))) {
+        }
+    
+        private Map<String, String> parseJsonToMap(String json) {
+            Map<String, String> map = new HashMap<>();
+            json = json.replaceAll("[{}\"]", "");
+            String[] pairs = json.split(",");
+            for (String pair : pairs) {
+                String[] keyValue = pair.split(":");
+                if (keyValue.length == 2) {
+                    map.put(keyValue[0].trim(), keyValue[1].trim());
+                }
+            }
+            return map;
+        }
+    
+        private String getRequestBody(HttpExchange exchange) throws IOException {
+            try (BufferedReader reader = new BufferedReader(
+                    new InputStreamReader(exchange.getRequestBody(), StandardCharsets.UTF_8))) {
+                StringBuilder sb = new StringBuilder();
                 String line;
                 while ((line = reader.readLine()) != null) {
-                    responseBuilder.append(line);
+                    sb.append(line);
                 }
+                return sb.toString();
             }
-            
-            conn.disconnect();
-        } catch (IOException e) {
-            responseBuilder.append("Error: ").append(e.getMessage());
         }
-        return responseBuilder.toString();
-    }
-
-    private void sendResponse(HttpExchange exchange, int statusCode, String response) throws IOException {
-        exchange.getResponseHeaders().set("Content-Type", "application/json");
-        byte[] responseBytes = response.getBytes(StandardCharsets.UTF_8);
-        exchange.sendResponseHeaders(statusCode, responseBytes.length);
-        try (OutputStream os = exchange.getResponseBody()) {
-            os.write(responseBytes);
-        }
-    }
-
-    private void sendErrorResponse(HttpExchange exchange, int statusCode, String errorMessage) throws IOException {
-        // sendResponse(exchange, statusCode, "{\"error\":\"" + errorMessage + "\"}");
-        sendResponse(exchange, statusCode, errorMessage);
-    }
-
-    private void forwardRequest(HttpExchange exchange, String targetUrl) throws IOException, URISyntaxException {
-        try {
-            // Create connection to target server
-            URI uri = new URI(targetUrl);
-            URL url = uri.toURL();
-            HttpURLConnection conn = (HttpURLConnection) url.openConnection();
-            conn.setRequestMethod(exchange.getRequestMethod());
-            
-            // Copy request headers
-            exchange.getRequestHeaders().forEach((key, values) -> {
-                for (String value : values) {
-                    conn.addRequestProperty(key, value);
-                }
-            });
-            
-            // Forward request body if present (for POST requests)
-            if ("POST".equalsIgnoreCase(exchange.getRequestMethod())) {
-                conn.setDoOutput(true);
-                try (OutputStream os = conn.getOutputStream()) {
-                    exchange.getRequestBody().transferTo(os);
-                }
-            }
-            
-            // Get response from target server
-            int responseCode = conn.getResponseCode();
-            InputStream responseBody;
+    
+        // Updated method that can take a pre-read request body
+        private void forwardRequest(HttpExchange exchange, String targetUrl, String preReadBody) throws IOException, URISyntaxException {
             try {
-                responseBody = conn.getInputStream();
-            } catch (IOException e) {
-                responseBody = conn.getErrorStream();
-            }
-            
-            // Forward response headers
-            conn.getHeaderFields().forEach((key, values) -> {
-                if (key != null) {  // Skip status line
-                    exchange.getResponseHeaders().put(key, values);
+                // Create connection to target server
+                URI uri = new URI(targetUrl);
+                URL url = uri.toURL();
+                HttpURLConnection conn = (HttpURLConnection) url.openConnection();
+                conn.setRequestMethod(exchange.getRequestMethod());
+                
+                // Copy request headers
+                exchange.getRequestHeaders().forEach((key, values) -> {
+                    for (String value : values) {
+                        conn.addRequestProperty(key, value);
+                    }
+                });
+                
+                // Forward request body if present
+                if ("POST".equalsIgnoreCase(exchange.getRequestMethod())) {
+                    conn.setDoOutput(true);
+                    if (preReadBody != null) {
+                        // Use the pre-read body
+                        try (OutputStream os = conn.getOutputStream()) {
+                            os.write(preReadBody.getBytes(StandardCharsets.UTF_8));
+                        }
+                    }
                 }
-            });
-            
-            // Forward response to client
-            exchange.sendResponseHeaders(responseCode, 0);
-            try (OutputStream os = exchange.getResponseBody()) {
-                responseBody.transferTo(os);
-            }
-            
-            conn.disconnect();
-        } catch (IOException e) {
-            String errorMessage = "" + e.getMessage();
-            exchange.sendResponseHeaders(500, errorMessage.length());
-            try (OutputStream os = exchange.getResponseBody()) {
-                os.write(errorMessage.getBytes(StandardCharsets.UTF_8));
+                
+                // Get response from target server
+                int responseCode = conn.getResponseCode();
+                InputStream responseBody;
+                try {
+                    responseBody = conn.getInputStream();
+                } catch (IOException e) {
+                    responseBody = conn.getErrorStream();
+                }
+                
+                // Forward response headers
+                conn.getHeaderFields().forEach((key, values) -> {
+                    if (key != null) {  // Skip status line
+                        exchange.getResponseHeaders().put(key, values);
+                    }
+                });
+                
+                // Forward response to client
+                exchange.sendResponseHeaders(responseCode, 0);
+                try (OutputStream os = exchange.getResponseBody()) {
+                    responseBody.transferTo(os);
+                }
+                
+                conn.disconnect();
+            } catch (IOException e) {
+                String errorMessage = "" + e.getMessage();
+                exchange.sendResponseHeaders(500, errorMessage.length());
+                try (OutputStream os = exchange.getResponseBody()) {
+                    os.write(errorMessage.getBytes(StandardCharsets.UTF_8));
+                }
             }
         }
+    
+        private void sendResponse(HttpExchange exchange, int statusCode, String response) throws IOException {
+            exchange.getResponseHeaders().set("Content-Type", "application/json");
+            byte[] responseBytes = response.getBytes(StandardCharsets.UTF_8);
+            exchange.sendResponseHeaders(statusCode, responseBytes.length);
+            try (OutputStream os = exchange.getResponseBody()) {
+                os.write(responseBytes);
+            }
+        }
+    
+        private void sendErrorResponse(HttpExchange exchange, int statusCode, String errorMessage) throws IOException {
+            sendResponse(exchange, statusCode, errorMessage);
+        }
     }
-}
 
 
 
