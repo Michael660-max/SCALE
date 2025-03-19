@@ -778,6 +778,7 @@ public class OrderService {
                     sendErrorResponse(exchange, 409, "");
                     return;
                 }
+
                 
                 Product product = new Product(id, name, description, price, quantity);
                 productCache.put(id, product);   
@@ -826,6 +827,10 @@ public class OrderService {
                         product.setQuantity(quantity);
                     }
                     
+                    if (description == null && description.equals("") || Double.parseDouble(priceStr) < 0 || Integer.parseInt(quantityStr) < 0) {
+                        // Update description in our product object
+                        sendErrorResponse(exchange, 400, "");
+                    }
                     // Update cache
                     productCache.put(id, product);
                     sendResponse(exchange, 200, productToJson(product));
