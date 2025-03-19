@@ -769,7 +769,7 @@ public class OrderService {
                 double price = Double.parseDouble(requestData.get("price"));
                 int quantity = Integer.parseInt(requestData.get("quantity"));
     
-                if (name == null || description == null || name.equals("") || description.equals("")) {
+                if (name == null || description == null || name.equals("") || description.equals("") || price < 0 || quantity < 0) {
                     sendErrorResponse(exchange, 400, "");
                     return;
                 }
@@ -815,13 +815,13 @@ public class OrderService {
                         // Update description in our product object
                         product.setDescription(description);
                     }
-                    if (priceStr != null && !priceStr.equals("")) {
+                    if (priceStr != null && !priceStr.equals("") || Double.parseDouble(priceStr) < 0) {
                         double price = Double.parseDouble(priceStr);
                         // Update price in our product object
                         double pric = Double.parseDouble(priceStr);
                         product.setPrice(pric);
                     }
-                    if (quantityStr != null && !quantityStr.equals("")) {
+                    if (quantityStr != null && !quantityStr.equals("") || Integer.parseInt(quantityStr) < 0) {
                         int quantity = Integer.parseInt(quantityStr);
                         product.setQuantity(quantity);
                     }
