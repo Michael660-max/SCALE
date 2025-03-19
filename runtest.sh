@@ -40,6 +40,7 @@ case "$1" in
     -restart)
         pkill -f java
         sleep .5
+        $ROOT_DIR/runme.sh -c
         start_all_services
         ;;
     -end)

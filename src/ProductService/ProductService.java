@@ -130,7 +130,7 @@ public class ProductService {
         server.setExecutor(java.util.concurrent.Executors.newFixedThreadPool(10));
         server.start();
 
-        System.out.println("UserService started on " + bindAddress + ":" + PORT);
+        System.out.println("ProductService started on " + bindAddress + ":" + PORT);
     }
 
     static class ShutdownHandler implements HttpHandler {
