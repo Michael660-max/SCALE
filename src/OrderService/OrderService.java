@@ -10,15 +10,28 @@ import java.net.URL;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Paths;
-import java.sql.Connection;
-import java.sql.DriverManager;
-import java.sql.PreparedStatement;
-import java.sql.ResultSet;
-import java.sql.SQLException;
-import java.sql.Statement;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.List;
+import java.util.ArrayList;
+
+import org.bson.Document;
+
+import com.mongodb.ErrorCategory;
+import com.mongodb.MongoWriteException;
+import com.mongodb.client.MongoClient;
+import com.mongodb.client.MongoClients;
+import com.mongodb.client.MongoCollection;
+import com.mongodb.client.MongoDatabase;
+import com.mongodb.client.model.Filters;
+import com.mongodb.client.model.Updates;
+import com.mongodb.client.result.DeleteResult;
+import com.mongodb.client.result.InsertOneResult;
+import com.mongodb.client.result.UpdateResult;
+import org.bson.Document;
+import com.mongodb.client.FindIterable;
+import com.mongodb.client.model.Sorts;
 
 public class OrderService {
     private static int PORT;
@@ -195,6 +208,7 @@ public class OrderService {
         }
     }
 
+    // TODOTODOTODO
     static {
         // Check if restart was the first command after startup
         File restartFlag = new File("restart_flag.txt");
@@ -202,34 +216,21 @@ public class OrderService {
         if (!restartFlag.exists() && shutdownFlag.exists()) {
             // No restart flag, so wipe all databases
             System.out.println("No restart flag detected - wiping all databases");
+            MongoDatabase database = DatabaseManager.getDatabase();
+            MongoCollection<Document> ordersCollection = database.getCollection("orders");
+            MongoCollection<Document> productsCollection = database.getCollection("products");;
+            MongoCollection<Document> usersCollection = database.getCollection("users");;
             
             try {
                 // Wipe OrderService database
-                try (Connection conn = DriverManager.getConnection("jdbc:sqlite:orders.db");
-                     Statement stmt = conn.createStatement()) {
-                    stmt.execute("DELETE FROM orders");
-                    System.out.println("Orders database wiped");
-                } catch (SQLException e) {
-                    System.err.println("Error wiping orders database: " + e.getMessage());
-                }
+                ordersCollection.deleteMany(new Document());
                 
                 // Wipe UserService database
-                try (Connection conn = DriverManager.getConnection("jdbc:sqlite:users.db");
-                     Statement stmt = conn.createStatement()) {
-                    stmt.execute("DELETE FROM users");
-                    System.out.println("Users database wiped");
-                } catch (SQLException e) {
-                    System.err.println("Error wiping users database: " + e.getMessage());
-                }
+                usersCollection.deleteMany(new Document());
                 
                 // Wipe ProductService database
-                try (Connection conn = DriverManager.getConnection("jdbc:sqlite:products.db");
-                     Statement stmt = conn.createStatement()) {
-                    stmt.execute("DELETE FROM products");
-                    System.out.println("Products database wiped");
-                } catch (SQLException e) {
-                    System.err.println("Error wiping products database: " + e.getMessage());
-                }
+                productsCollection.deleteMany(new Document());
+
                 shutdownFlag.delete();
             } catch (Exception e) {
                 System.err.println("Error during database wiping: " + e.getMessage());
@@ -453,75 +454,28 @@ class Product {
     }
 }
 
-class UserDatabaseManager {
-    private static final String DB_URL = "jdbc:sqlite:../UserService/users.db";
-    
-    static {
-        try {
-            Class.forName("org.sqlite.JDBC");
-            System.out.println("SQLite JDBC driver loaded successfully");
-        } catch (ClassNotFoundException e) {
-            System.err.println("Error loading SQLite driver: " + e.getMessage());
-        }
-    }
-
-    public static Connection getConnection() throws SQLException {
-        return DriverManager.getConnection(DB_URL);
-    }
-}
-
 class DatabaseManager {
-    private static final String DB_URL = "jdbc:sqlite:orders.db";
-    private static boolean initialized = false;
-    
-    static {
-        try {
-            Class.forName("org.sqlite.JDBC");
-            System.out.println("SQLite JDBC driver loaded successfully");
-        } catch (ClassNotFoundException e) {
-            System.err.println("Error loading SQLite driver: " + e.getMessage());
+    private static MongoDatabase database;
+
+    public static void initializeDatabase() {
+        if (database == null) {
+            try {
+                String mongoUri = "mongodb://mongoadmin:1234@142.1.114.66:27017";
+                MongoClient mongoClient = MongoClients.create(mongoUri);
+                database = mongoClient.getDatabase("mydatabase");
+                System.out.println("MongoDB connected successfully on PRODUCT service!");
+            } catch (Exception e) {
+                System.err.println("Error connecting to MongoDB: " + e.getMessage());
+            }
         }
     }
 
-    public static Connection getConnection() throws SQLException {
-        // Initialize database on first connection
-        if (!initialized) {
-            initialized = true;
-            initializeDatabase();
+    public static MongoDatabase getDatabase() {
+        if (database == null) {
+            throw new IllegalStateException("Database not initialized. Call initializeDatabase() first.");
+        } else {
+            return database;
         }
-        return DriverManager.getConnection(DB_URL);
-    }
-    
-    private static void initializeDatabase() {
-        try (Connection conn = DriverManager.getConnection(DB_URL);
-             Statement stmt = conn.createStatement()) {
-            stmt.execute("CREATE TABLE IF NOT EXISTS orders (" +
-                         "id INT PRIMARY KEY," +
-                         "product_id INT NOT NULL, " +
-                         "user_id INT NOT NULL, " +
-                         "quantity INT NOT NULL)");
-            System.out.println("Database initialized successfully");
-
-        } catch (SQLException e) {
-            System.err.println("Error initializing database: " + e.getMessage());
-        }
-    }
-}
-
-class ProductDatabaseManager {
-    private static final String DB_URL = "jdbc:sqlite:../ProductService/products.db";
-    
-    static {
-        try {
-            Class.forName("org.sqlite.JDBC");
-            System.out.println("SQLite JDBC driver loaded successfully");
-        } catch (ClassNotFoundException e) {
-            System.err.println("Error loading SQLite driver: " + e.getMessage());
-        }
-    }
-
-    public static Connection getConnection() throws SQLException {
-        return DriverManager.getConnection(DB_URL);
     }
 }
 
@@ -533,19 +487,25 @@ class Order {
     final int quantity;
     final String status;
 
+    // TODOTODOTODO
    public Order(int productId, int userId, int quantity, String status) {
+        MongoDatabase database = DatabaseManager.getDatabase();
+        MongoCollection<Document> collection = database.getCollection("orders");
+
         this.id = nextId++;
-        try (Connection conn = DatabaseManager.getConnection();
-             PreparedStatement stmt = conn.prepareStatement(
-                 "SELECT MAX(id) FROM orders")) {
-            
-            try (ResultSet rs = stmt.executeQuery()) {
-                if (rs.next()) {
-                    this.id = rs.getInt(1) + 1;
-                }
+        try {
+            // Query the collection to find the largest "id" value (sorted in descending order)
+            FindIterable<Document> result = collection.find()
+            .sort(Sorts.descending("id"))  // Sort by the "id" field in descending order
+            .limit(1);  // Limit the result to just one document
+
+            // Retrieve the document with the largest "id"
+            Document largestIdDocument = result.first();
+            if (largestIdDocument != null) {
+                this.id = largestIdDocument.getInteger("id") + 1;
             }
-        } catch (SQLException e) {
-            System.err.println("Error retrieving product: " + e.getMessage());
+        } catch (Exception e) {
+            System.err.println("Error getting product: " + e.getMessage());
         }
         // System.out.println("this id: " + this.id);
         this.productId = productId;
@@ -568,60 +528,45 @@ class Order {
 }
 
 class OrderManager {
+    MongoCollection<Document> collection;
+    private final String collectionName = "orders";
 
     public OrderManager() {
         try {
-            DatabaseManager.getConnection().close();
-        } catch (SQLException e) {
-            System.err.println("Error initializing user manager: " + e.getMessage());
+            DatabaseManager.initializeDatabase();
+            MongoDatabase database = DatabaseManager.getDatabase();
+            createOrderCollection(database);
+            collection = database.getCollection(collectionName);
+            collection.createIndex(new Document("id", 1));
+        } catch (Exception e) {
+            System.err.println("Error initializing order collection: " + e.getMessage());
+        }
+    }
+
+    private void createOrderCollection(MongoDatabase db) {
+        List<String> collectionNames = db.listCollectionNames().into(new ArrayList<>());
+
+        if (!collectionNames.contains(collectionName)) {
+            db.createCollection(collectionName);
         }
     }
 
     public void addOrder(Order order) {
-        try (Connection conn = DatabaseManager.getConnection();
-            PreparedStatement stmt = conn.prepareStatement(
-                "INSERT INTO orders (id, product_id, user_id, quantity) VALUES (?, ?, ?, ?)")) {
-            stmt.setInt(1, order.getId());
-            stmt.setInt(2, order.getProductID());
-            stmt.setInt(3, order.getUserID());
-            stmt.setInt(4, order.getQuantity());
-
-            int rowsAffected = stmt.executeUpdate();
-            if (rowsAffected <= 0) {
-                System.err.println("No order database rows affected.");
-                return;
+        try {
+            Document newOrder = new Document("id", order.getId())
+                    .append("product_id", order.getProductID())
+                    .append("user_id", order.getUserID())
+                    .append("quantity", order.getQuantity());
+            collection.insertOne(newOrder);
+        } catch (MongoWriteException e) {
+            if (e.getError().getCategory() == ErrorCategory.DUPLICATE_KEY) {
+                System.err.println("Error: Order ID already exists.");
             }
-        } catch (SQLException e) {
+        } catch (Exception e) {
             System.err.println("Error adding order: " + e.getMessage());
-            return;
         }
     }
-
-    // public List<Order> getOrders() {
-    //     try (Connection conn = DatabaseManager.getConnection();
-    //          PreparedStatement stmt = conn.prepareStatement(
-    //              "SELECT * FROM orders WHERE id = ?")) {
-                 
-    //         stmt.setInt(1, id);
-            
-    //         try (ResultSet rs = stmt.executeQuery()) {
-    //             if (rs.next()) {
-    //                 return new User(
-    //                     rs.getInt("id"),
-    //                     rs.getString("username"),
-    //                     rs.getString("email"),
-    //                     rs.getString("password")
-    //                 );
-    //             }
-    //             return null;
-    //         }
-    //     } catch (SQLException e) {
-    //         System.err.println("Error retrieving user: " + e.getMessage());
-    //         return null;
-    //     }
-    // }
 }
-
 
 class OrderHandler implements HttpHandler {
     private static OrderManager orderManager = new OrderManager();
@@ -674,7 +619,6 @@ class OrderHandler implements HttpHandler {
     private void handleOrderCommand(HttpExchange exchange) throws IOException, URISyntaxException {
         String requestBody = new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8);
         // System.out.println("reqbody" + requestBody);
-        
         try {
             // Clean up the input string and parse JSON
             Map<String, Object> commandMap = parseJson(requestBody);
@@ -723,24 +667,26 @@ class OrderHandler implements HttpHandler {
                 return;
             }
     
+            // System.out.println("prodID: " + productId);
+            // System.out.println("quantity: " + getProductQuantity(productId));
+            // System.out.println("cmdquantity: " + quantity);
             // Check if enough stock is available
-            if (product.getQuantity() < quantity) {
+            if (getProductQuantity(productId) < quantity) {
                 sendErrorResponse(exchange, "Exceeded quantity limit");
                 return;
             }
-
 
             // Create Order object
             Order order = new Order(productId, userId, quantity, "Success");
             orderManager.addOrder(order);
     
             // Update product quantity
-            int newQuantity = product.getQuantity() - quantity;
+            int newQuantity = getProductQuantity(productId) - quantity;
             String updateJson = String.format(
                 "{\"command\":\"update\",\"id\":%d,\"quantity\":%d}",
                 productId, newQuantity
             );
-    
+
             // Send update request to Product service
             String productUrl = String.format("http://%s:%s/product",
                 OrderService.PRODUCT_SERVER_IP,
@@ -795,10 +741,9 @@ class OrderHandler implements HttpHandler {
         "{" +
         "\"product_id\":%d," +
         "\"user_id\":%d," +
-        "\"quantity\":%d" +
-        "\"status\":\"Success\"," +
+        "\"quantity\":%d," +
+        "\"status\":\"Success\"" +
         "}",
-        order.id,
         order.productId,
         order.userId,
         order.quantity
@@ -811,73 +756,57 @@ class OrderHandler implements HttpHandler {
             os.write(responseBytes);
         }
     }
-    private Product getProduct(int id) throws IOException, URISyntaxException  {
-        try (Connection conn = ProductDatabaseManager.getConnection();
-             PreparedStatement stmt = conn.prepareStatement(
-                 "SELECT * FROM products WHERE id = ?")) {
-                 
-            stmt.setInt(1, id);
 
-            try (ResultSet rs = stmt.executeQuery()) {
-                // System.out.println("IN RESULTSET, rs: " + rs);
-                if (rs.next()) {
-                    return new Product(
-                        rs.getInt("id"),
-                        rs.getString("name"),
-                        rs.getString("description"),
-                        rs.getDouble("price"),
-                        rs.getInt("quantity")
-                    );
-                }
-                return null;
+    // TODOTODOTODO
+    private Product getProduct(int id) throws IOException, URISyntaxException  {
+        MongoDatabase database = DatabaseManager.getDatabase();
+        MongoCollection<Document> collection = database.getCollection("products");
+
+        try {
+            Document foundProduct = collection.find(Filters.eq("id", id)).first();
+            if (foundProduct != null) {
+                return new Product(foundProduct.getInteger("id"), foundProduct.getString("name"),
+                        foundProduct.getString("description"), foundProduct.getDouble("price"),
+                        foundProduct.getInteger("quantity"));
             }
-        } catch (SQLException e) {
-            System.err.println("Error retrieving product: " + e.getMessage());
+            return null;
+        } catch (Exception e) {
+            System.err.println("Error getting product: " + e.getMessage());
             return null;
         }
     }
 
-    private boolean checkUserExists(int id) throws IOException, URISyntaxException {
-        try (Connection conn = UserDatabaseManager.getConnection();
-             PreparedStatement stmt = conn.prepareStatement(
-                 "SELECT * FROM users WHERE id = ?")) {
-                 
-            stmt.setInt(1, id);
+    private int getProductQuantity(int id) throws IOException, URISyntaxException  {
+        MongoDatabase database = DatabaseManager.getDatabase();
+        MongoCollection<Document> collection = database.getCollection("products");
 
-            try (ResultSet rs = stmt.executeQuery()) {
-                if (rs.next()) {
-                    return true;
-                }
-                return false;
+        try {
+            Document foundProduct = collection.find(Filters.eq("id", id)).first();
+            if (foundProduct != null) {
+                return foundProduct.getInteger("quantity");
             }
-        } catch (SQLException e) {
-            System.err.println("Error retrieving product: " + e.getMessage());
-            return false;
+            return -1;
+        } catch (Exception e) {
+            System.err.println("Error getting product quantity: " + e.getMessage());
+            return -1;
         }
     }
 
-    private String sendGetRequest(String urlString) throws IOException, URISyntaxException {
-        URI uri = new URI(urlString);
-        URL url = uri.toURL();
-        HttpURLConnection conn = (HttpURLConnection) url.openConnection();
-        conn.setRequestMethod("GET");
-        
+    // TODOTODOTODO
+    private boolean checkUserExists(int id) throws IOException, URISyntaxException {
+        MongoDatabase database = DatabaseManager.getDatabase();
+        MongoCollection<Document> collection = database.getCollection("users");
+
         try {
-            // if (conn.getResponseCode() == 200) {
-                try (BufferedReader reader = new BufferedReader(
-                        new InputStreamReader(conn.getInputStream(), StandardCharsets.UTF_8))) {
-                    StringBuilder response = new StringBuilder();
-                    String line;
-                    while ((line = reader.readLine()) != null) {
-                        response.append(line);
-                    }
-                    return response.toString();
-                // }
+            Document foundUser = collection.find(Filters.eq("id", id)).first();
+            if (foundUser != null) {
+                return true;
             }
-        } finally {
-            conn.disconnect();
+            return false;
+        } catch (Exception e) {
+            System.err.println("Error checking user exists: " + e.getMessage());
+            return false;
         }
-        // return null;
     }
 
     private String sendPostRequest(String urlString, String jsonBody) throws IOException, URISyntaxException {
