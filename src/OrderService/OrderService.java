@@ -45,6 +45,8 @@ public class OrderService {
     static String USER_SERVER_PORT;
     static String USER_SERVER_IP;
     public static Map<Integer, UserInfo> userCache = new ConcurrentHashMap<>();
+    public static Map<Integer, Product> productCache = new ConcurrentHashMap<>();
+
 
 
     private static void loadConfig(String path) {
@@ -677,7 +679,7 @@ public class OrderService {
 
     class ProductHandler implements HttpHandler {
         // Add a concurrent cache map similar to the userCache
-        public static Map<Integer, Product> productCache = new ConcurrentHashMap<>();
+        // public static Map<Integer, Product> productCache = new ConcurrentHashMap<>();
     
         @Override
         public void handle(HttpExchange exchange) throws IOException {
@@ -710,8 +712,8 @@ public class OrderService {
             
             try {
                 int id = Integer.parseInt(segments[2]);
-                if (productCache.containsKey(id)) {
-                    Product product = productCache.get(id);
+                if (OrderService.productCache.containsKey(id)) {
+                    Product product = OrderService.productCache.get(id);
                     sendResponse(exchange, 200, productToJson(product));
                 } else {
                     try {
@@ -774,14 +776,14 @@ public class OrderService {
                     return;
                 }
                 
-                if (productCache.containsKey(id)) {
+                if (OrderService.productCache.containsKey(id)) {
                     sendErrorResponse(exchange, 409, "");
                     return;
                 }
 
                 
                 Product product = new Product(id, name, description, price, quantity);
-                productCache.put(id, product);   
+                OrderService.productCache.put(id, product);   
                 sendResponse(exchange, 200, productToJson(product));
                 
                 try {
@@ -805,9 +807,9 @@ public class OrderService {
                 String priceStr = requestData.get("price");
                 String quantityStr = requestData.get("quantity");
                 
-                if (productCache.containsKey(id)) {
+                if (OrderService.productCache.containsKey(id)) {
                     // Product exists in cache
-                    Product product = productCache.get(id);
+                    Product product = OrderService.productCache.get(id);
                     if (name != null && !name.equals("")) {
                         // Update name in our product object
                         product.setName(name);
@@ -832,7 +834,7 @@ public class OrderService {
                         sendErrorResponse(exchange, 400, "");
                     }
                     // Update cache
-                    productCache.put(id, product);
+                    OrderService.productCache.put(id, product);
                     sendResponse(exchange, 200, productToJson(product));
     
                     try {
@@ -860,8 +862,8 @@ public class OrderService {
             try {
                 int id = Integer.parseInt(requestData.get("id"));
                 
-                if (productCache.containsKey(id)) {
-                    productCache.remove(id);
+                if (OrderService.productCache.containsKey(id)) {
+                    OrderService.productCache.remove(id);
                     sendResponse(exchange, 200, "");
     
                     try {
@@ -1337,6 +1339,8 @@ class OrderHandler implements HttpHandler {
             product.setQuantity(newQuantity);
             productCache.put(productId, product);
 
+            sendSuccessResponse(exchange, order);
+
             // Update user's purchase history in UserService
             String userServiceUrl = String.format("http://%s:%s/user/%d/purchase",
             OrderService.USER_SERVER_IP,
@@ -1353,7 +1357,7 @@ class OrderHandler implements HttpHandler {
             }
     
             // Send success response with order details
-            sendSuccessResponse(exchange, order);
+            // sendSuccessResponse(exchange, order);
     
         } catch (Exception e) {
             sendErrorResponse(exchange, "Invalid Request");
