@@ -1060,8 +1060,6 @@ class Product {
     public void setName(String name) { this.name = name; }
     public void setPrice(double price) { this.price = price; }
     public void setDescription(String desc) { this.description = desc; }
-    public String getDescription() { return description; }
-    public double getPrice() { return price; }
 
 
     public static Product fromJson(String json) {
