@@ -816,13 +816,13 @@ public class OrderService {
                         // Update description in our product object
                         product.setDescription(description);
                     }
-                    if (priceStr != null && !priceStr.equals("") || Double.parseDouble(priceStr) < 0) {
+                    if (priceStr != null && !priceStr.equals("") || Double.parseDouble(priceStr) >= 0) {
                         double price = Double.parseDouble(priceStr);
                         // Update price in our product object
                         double pric = Double.parseDouble(priceStr);
                         product.setPrice(pric);
                     }
-                    if (quantityStr != null && !quantityStr.equals("") || Integer.parseInt(quantityStr) < 0) {
+                    if (quantityStr != null && !quantityStr.equals("") || Integer.parseInt(quantityStr) >= 0) {
                         int quantity = Integer.parseInt(quantityStr);
                         product.setQuantity(quantity);
                     }
@@ -1060,6 +1060,8 @@ class Product {
     public void setName(String name) { this.name = name; }
     public void setPrice(double price) { this.price = price; }
     public void setDescription(String desc) { this.description = desc; }
+    public String getDescription() { return description; }
+    public double getPrice() { return price; }
 
 
     public static Product fromJson(String json) {
